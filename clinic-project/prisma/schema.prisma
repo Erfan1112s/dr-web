@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// جدول نوبت‌ها
+model Appointment {
+  id          Int      @id @default(autoincrement())
+  patientName String   @map("patient_name")
+  patientPhone String  @map("patient_phone")
+  day         String   // یکشنبه یا سه‌شنبه
+  time        String   // ساعت انتخابی
+  status      String   @default("pending") // pending, confirmed, cancelled
+  createdAt   DateTime @default(now()) @map("created_at")
+  smsSent     Boolean  @default(false) @map("sms_sent")
+
+  @@map("appointments")
+}
+
+// جدول ذخیره مکالمات چت (برای نگهداری تاریخچه)
+model ChatMessage {
+  id        Int      @id @default(autoincrement())
+  sessionId String   @map("session_id") // برای هر بازدیدکننده یک id
+  userMsg   String   @map("user_message")
+  botMsg    String   @map("bot_message")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("chat_messages")
+}
+
+// جدول دانش (Knowledge Base) برای RAG
+model Knowledge {
+  id        Int      @id @default(autoincrement())
+  question  String   // سوال احتمالی کاربر
+  answer    String   // پاسخ استاندارد
+  embedding Unsupported("vector")? // اینجا بردار 1536 بعدی ذخیره می‌شود (برای OpenAI)
+  category  String?  // دسته‌بندی: خدمات, ساعت کاری, بیمه, ...
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("knowledge")
+}
