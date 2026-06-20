@@ -1,9 +1,7 @@
 // app/api/appointment/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import axios from 'axios';
-
-const prisma = new PrismaClient();
 
 // دریافت ساعت‌های آزاد (GET)
 export async function GET(req: NextRequest) {
