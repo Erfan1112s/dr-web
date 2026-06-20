@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { clinicInfo } from '../contect/clinicInfo';
 import { Menu, X, Phone } from 'lucide-react';
-import styles from './Header.module.css';
+import Link from 'next/link';
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -90,12 +90,12 @@ export default function Header() {
                 {item === 'contact' && 'تماس با ما'}
               </button>
             ))}
-            <button
-              onClick={() => scrollToSection('booking')}
-              className="bg-[var(--color-primary)] text-white py-4 rounded-2xl font-medium mt-4 shadow-md"
+            <Link
+             href="/appointment"
+            className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-white px-8 py-3 rounded-full font-medium transition-all"
             >
-              رزرو نوبت آنلاین
-            </button>
+            رزرو نوبت   
+            </Link>
           </div>
         </div>
       )}

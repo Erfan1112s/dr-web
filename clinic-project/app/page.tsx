@@ -1,4 +1,3 @@
-import ChatWidget from './components/ChatWidget';
 import Header from './components/ui/Header';
 import Hero from './components/ui/Hero';
 import Services from './components/ui/services';
@@ -18,28 +17,5 @@ export default function Home() {
         <Contact />
       </main>
     </>
-  );
-}
-
-export default function RootLayout({ children }) {
-  return (
-    <html lang="fa" dir="rtl">
-      <body>
-        {children}
-        <FloatingBookButton />  
-        <ChatWidget />         
-      </body>
-    </html>
-  );
-}
-
-export default function RootLayout({ children }) {
-  return (
-    <html lang="fa" dir="rtl">
-      <body>
-        {children}
-        <ChatWidget />
-      </body>
-    </html>
   );
 }
