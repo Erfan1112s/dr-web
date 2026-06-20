@@ -2,6 +2,7 @@
 'use client';
 
 import { clinicInfo } from '../contect/clinicInfo';
+import Link from 'next/link';
 
 
 export default function Hero() {
@@ -22,12 +23,12 @@ export default function Hero() {
           </p>
 
           <div className="flex flex-wrap gap-4">
-            <button 
-              onClick={() => document.getElementById('booking')?.scrollIntoView({ behavior: 'smooth' })}
+            <Link
+              href="/appointment"
               className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-white px-10 py-4 rounded-full text-lg font-medium transition-all active:scale-95 shadow-lg"
             >
               رزرو نوبت آنلاین
-            </button>
+            </Link>
             
             <a 
               href={`tel:${clinicInfo.phone}`}

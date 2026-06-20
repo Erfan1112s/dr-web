@@ -3,6 +3,7 @@
 
 import { clinicInfo } from '../contect/clinicInfo';
 import { Award, Clock, Heart, Star } from 'lucide-react';
+import Link from 'next/link';
 
 export default function About() {
   return (
@@ -64,12 +65,12 @@ export default function About() {
               </div>
             </div>
 
-            <button
-              onClick={() => document.getElementById('booking')?.scrollIntoView({ behavior: 'smooth' })}
-              className="mt-10 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary-light)] text-white px-10 py-4 rounded-full text-lg font-medium transition-all hover:shadow-xl active:scale-95"
+            <Link
+              href="/appointment"
+              className="mt-10 inline-block bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary-light)] text-white px-10 py-4 rounded-full text-lg font-medium transition-all hover:shadow-xl active:scale-95"
             >
               رزرو نوبت و مشاوره
-            </button>
+            </Link>
           </div>
         </div>
       </div>

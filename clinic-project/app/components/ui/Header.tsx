@@ -59,12 +59,12 @@ export default function Header() {
             <Phone size={18} />
             {clinicInfo.phone}
           </a>
-          <button
-            onClick={() => scrollToSection('booking')}
+          <Link
+            href="/appointment"
             className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary-light)] hover:shadow-lg text-white px-8 py-3 rounded-full font-medium transition-all active:scale-95"
           >
             رزرو نوبت
-          </button>
+          </Link>
         </div>
 
         {/* دکمه موبایل */}
