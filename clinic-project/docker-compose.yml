@@ -1,0 +1,41 @@
+# docker-compose.yml — place in the root of "clinic-project", next to the Dockerfile.
+#
+# Run with:  docker compose up --build
+# Stop with: docker compose down          (add -v to also wipe the demo database)
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: clinic
+    ports:
+      - "5432:5432" # optional: lets you inspect the DB from a Windows GUI tool
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./docker/init-db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Points at the "db" service above, not the host machine
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/clinic?schema=public
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:
