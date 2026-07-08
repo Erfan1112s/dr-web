@@ -1,15 +1,26 @@
+// prisma/schema.prisma
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters"] // این خط را اضافه کنید
+  provider = "prisma-client-js"
 }
-
 
 datasource db {
   provider = "postgresql"
-  // خط url را حذف کنید، چون دیگر در اینجا استفاده نمی‌شود
 }
 
-// جدول نوبت‌ها
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String   @unique
+  password  String   // هش شده با bcrypt
+  role      String   @default("patient") // "patient" یا "admin"
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  appointments Appointment[]
+
+  @@map("users")
+}
+
 model Appointment {
   id          Int      @id @default(autoincrement())
   patientName String   @map("patient_name")
@@ -17,32 +28,12 @@ model Appointment {
   day         String
   time        String
   description String?
-  status      String   @default("pending")
+  status      String   @default("pending") // pending, confirmed, cancelled, completed
+  userId      Int?     @map("user_id")
   createdAt   DateTime @default(now()) @map("created_at")
   smsSent     Boolean  @default(false) @map("sms_sent")
 
+  user        User?    @relation(fields: [userId], references: [id])
+
   @@map("appointments")
-}
-
-// جدول ذخیره مکالمات چت (برای نگهداری تاریخچه)
-model ChatMessage {
-  id        Int      @id @default(autoincrement())
-  sessionId String   @map("session_id") // برای هر بازدیدکننده یک id
-  userMsg   String   @map("user_message")
-  botMsg    String   @map("bot_message")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@map("chat_messages")
-}
-
-// جدول دانش (Knowledge Base) برای RAG
-model Knowledge {
-  id        Int      @id @default(autoincrement())
-  question  String   // سوال احتمالی کاربر
-  answer    String   // پاسخ استاندارد
-  embedding Unsupported("vector")? // اینجا بردار 1536 بعدی ذخیره می‌شود (برای OpenAI)
-  category  String?  // دسته‌بندی: خدمات, ساعت کاری, بیمه, ...
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@map("knowledge")
 }

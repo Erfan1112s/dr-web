@@ -15,7 +15,7 @@ export default function Footer() {
           <div>
             <h3 className="text-xl font-bold text-white mb-5 flex items-center gap-2">
               <span className="text-2xl">👩‍⚕️</span>
-              زهره بصارت
+              فرشته صادقی
             </h3>
             <p className="text-sm leading-relaxed mb-4 text-white/70">
               کارشناس مامایی با بیش از {clinicInfo.experience} سال تجربه در زمینه بهداشت زنان و مامایی.

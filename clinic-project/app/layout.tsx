@@ -1,23 +1,28 @@
 // app/layout.tsx
 import type { Metadata } from 'next';
 import './globals.css';
-import ChatWidget from './components/ChatWidget';
+import { Providers } from './providers';
 import Footer from './components/ui/footer';
-
+import ChatWidget from './components/ChatWidget';
 
 export const metadata: Metadata = {
-  title: 'نوبت‌دهی آنلاین مامایی خمینی‌شهر | فرشته صادقی',
-  description: 'مطب فرشته صادقی - کارشناس مامایی در خمینی‌شهر',
-  // ... بقیه metadata
+  title: 'نوبت‌دهی آنلاین مامایی خمینی‌شهر | زهره بصارت',
+  description: 'مطب زهره بصارت - کارشناس مامایی در خمینی‌شهر',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="fa" dir="rtl" data-scroll-behavior="smooth">
+    <html lang="fa" dir="rtl">
       <body>
-        {children}
-        <Footer />
-        <ChatWidget />
+        <Providers>
+          {children}
+          <ChatWidget />
+          <Footer />
+        </Providers>
       </body>
     </html>
   );
