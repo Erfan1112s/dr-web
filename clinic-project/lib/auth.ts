@@ -1,12 +1,24 @@
 // lib/auth.ts
-import NextAuth from 'next-auth';
+import NextAuth, { NextAuthConfig } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import { PrismaAdapter } from '@next-auth/prisma-adapter';
-import { prisma } from './prisma';
+import { PrismaAdapter } from '@auth/prisma-adapter';
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma),
+// Create a separate Prisma client for auth (with adapter for query engine)
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+const adapterPg = new PrismaPg(pool);
+const authPrisma = new PrismaClient({
+  adapter: adapterPg,
+});
+
+export const authOptions: NextAuthConfig = {
+  adapter: PrismaAdapter(authPrisma),
   providers: [
     CredentialsProvider({
       name: 'credentials',
@@ -17,7 +29,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.phone || !credentials?.password) return null;
 
-        const user = await prisma.user.findUnique({
+        const user = await authPrisma.user.findUnique({
           where: { phone: credentials.phone },
         });
 
@@ -45,7 +57,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async session({ session, token }) {
       if (token) {
-        session.user.role = token.role;
+        session.user.role = token.role as string;
         session.user.id = token.id as string;
       }
       return session;
@@ -58,4 +70,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: '/login',
   },
   secret: process.env.NEXTAUTH_SECRET,
-});
+};
+
+export const { handlers, auth, signIn, signOut } = NextAuth(authOptions);
