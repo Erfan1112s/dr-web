@@ -1,75 +1,89 @@
-// lib/auth.ts
-import NextAuth, { NextAuthConfig } from 'next-auth';
-import CredentialsProvider from 'next-auth/providers/credentials';
-import { PrismaAdapter } from '@auth/prisma-adapter';
-import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { Pool } from 'pg';
-import bcrypt from 'bcryptjs';
+import NextAuth, { type NextAuthConfig } from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
+import { PrismaAdapter } from "@auth/prisma-adapter";
+import bcrypt from "bcryptjs";
 
-// Create a separate Prisma client for auth (with adapter for query engine)
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
-
-const adapterPg = new PrismaPg(pool);
-const authPrisma = new PrismaClient({
-  adapter: adapterPg,
-});
+import { prisma } from "./prisma";
 
 export const authOptions: NextAuthConfig = {
-  adapter: PrismaAdapter(authPrisma),
+  adapter: PrismaAdapter(prisma),
+
+  session: {
+    strategy: "jwt",
+  },
+
+  secret: process.env.NEXTAUTH_SECRET,
+
+  pages: {
+    signIn: "/login",
+  },
+
   providers: [
     CredentialsProvider({
-      name: 'credentials',
-      credentials: {
-        phone: { label: 'شماره موبایل', type: 'text' },
-        password: { label: 'رمز عبور', type: 'password' },
-      },
-      async authorize(credentials) {
-        if (!credentials?.phone || !credentials?.password) return null;
+      name: "credentials",
 
-        const user = await authPrisma.user.findUnique({
-          where: { phone: credentials.phone },
+      credentials: {
+        phone: {
+          label: "شماره موبایل",
+          type: "text",
+        },
+        password: {
+          label: "رمز عبور",
+          type: "password",
+        },
+      },
+
+      async authorize(credentials) {
+        if (!credentials?.phone || !credentials?.password)
+          return null;
+
+        const user = await prisma.user.findUnique({
+          where: {
+            phone: credentials.phone as string,
+          },
         });
 
-        if (!user) return null;
+        if (!user)
+          return null;
 
-        const passwordMatch = await bcrypt.compare(credentials.password, user.password);
-        if (!passwordMatch) return null;
+        const ok = await bcrypt.compare(
+          credentials.password as string,
+          user.password
+        );
+
+        if (!ok)
+          return null;
 
         return {
           id: String(user.id),
           name: user.name,
-          phone: user.phone,
           role: user.role,
+          phone: user.phone,
         };
       },
     }),
   ],
+
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = user.role;
         token.id = user.id;
+        token.role = user.role;
       }
+
       return token;
     },
+
     async session({ session, token }) {
-      if (token) {
-        session.user.role = token.role as string;
+      if (session.user) {
         session.user.id = token.id as string;
+        session.user.role = token.role as string;
       }
+
       return session;
     },
   },
-  session: {
-    strategy: 'jwt',
-  },
-  pages: {
-    signIn: '/login',
-  },
-  secret: process.env.NEXTAUTH_SECRET,
 };
 
-export const { handlers, auth, signIn, signOut } = NextAuth(authOptions);
+export const { handlers, auth, signIn, signOut } =
+  NextAuth(authOptions);

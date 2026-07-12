@@ -1,193 +1,92 @@
-// app/dashboard/page.tsx
+// app/login/page.tsx
 'use client';
 
-import { useSession, signOut } from 'next-auth/react';
+import { useState } from 'react';
+import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { Calendar, Clock, User, Phone, LogOut, XCircle, CheckCircle } from 'lucide-react';
+import { Phone, Lock, LogIn } from 'lucide-react';
 
-type Appointment = {
-  id: number;
-  patientName: string;
-  patientPhone: string;
-  day: string;
-  time: string;
-  status: string;
-  description?: string;
-  createdAt: string;
-};
-
-export default function DashboardPage() {
-  const { data: session, status } = useSession();
+export default function LoginPage() {
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [cancelling, setCancelling] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login');
-    }
-    if (session?.user) {
-      fetchAppointments();
-    }
-  }, [status, session]);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
-  const fetchAppointments = async () => {
-    try {
-      const res = await fetch('/api/appointments?userId=' + session?.user?.id);
-      const data = await res.json();
-      setAppointments(data);
-    } catch (error) {
-      console.error('Error fetching appointments:', error);
-    } finally {
+    const result = await signIn('credentials', {
+      phone,
+      password,
+      redirect: false,
+    });
+
+    if (result?.error) {
+      setError('شماره موبایل یا رمز عبور اشتباه است');
       setLoading(false);
+    } else {
+      router.push('/dashboard');
     }
   };
-
-  const cancelAppointment = async (id: number) => {
-    if (!confirm('آیا از لغو این نوبت اطمینان دارید؟')) return;
-    setCancelling(id);
-    try {
-      const res = await fetch('/api/appointments', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, status: 'cancelled' }),
-      });
-      if (res.ok) {
-        setAppointments(prev =>
-          prev.map(a => a.id === id ? { ...a, status: 'cancelled' } : a)
-        );
-      }
-    } catch (error) {
-      console.error('Error cancelling appointment:', error);
-    } finally {
-      setCancelling(null);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-[var(--color-primary)] border-t-transparent"></div>
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg-light)] py-12">
-      <div className="container max-w-4xl mx-auto px-4">
-        {/* هدر پنل */}
-        <div className="bg-white rounded-3xl shadow-lg p-6 mb-8 border border-gray-100">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
-                <User className="text-[var(--color-primary)]" />
-                پنل کاربری
-              </h1>
-              <p className="text-[var(--color-text-light)] text-sm">
-                {session?.user?.name} عزیز خوش آمدید
-              </p>
-            </div>
-            <button
-              onClick={() => signOut()}
-              className="flex items-center gap-2 text-red-500 hover:text-red-700 transition px-4 py-2 bg-red-50 rounded-full"
-            >
-              <LogOut size={18} />
-              خروج
-            </button>
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-[var(--color-primary-bg)] to-white flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md border border-gray-100">
+        <div className="text-center mb-8">
+          <div className="text-6xl mb-4">👩‍⚕️</div>
+          <h1 className="text-3xl font-bold text-[var(--color-text-dark)]">ورود به پنل</h1>
+          <p className="text-[var(--color-text-light)] mt-2">مطب تخصصی مامایی فرشته صادقی</p>
         </div>
 
-        {/* آمار */}
-        <div className="grid grid-cols-2 gap-4 mb-8">
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
-            <div className="text-3xl font-bold text-[var(--color-primary)]">{appointments.length}</div>
-            <div className="text-sm text-[var(--color-text-light)]">کل نوبت‌ها</div>
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-2xl mb-6 text-sm">
+            {error}
           </div>
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
-            <div className="text-3xl font-bold text-green-500">
-              {appointments.filter(a => a.status === 'confirmed').length}
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label className="block text-sm font-medium mb-2">شماره موبایل</label>
+            <div className="relative">
+              <Phone className="absolute right-3 top-3 text-gray-400" size={20} />
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full pr-12 pl-4 py-3 border border-gray-300 rounded-2xl focus:border-[var(--color-primary)] focus:outline-none transition"
+                placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+                required
+              />
             </div>
-            <div className="text-sm text-[var(--color-text-light)]">نوبت‌های تأییدشده</div>
           </div>
-        </div>
 
-        {/* لیست نوبت‌ها */}
-        <div className="bg-white rounded-3xl shadow-lg p-6 border border-gray-100">
-          <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-            <Calendar className="text-[var(--color-primary)]" />
-            نوبت‌های من
-          </h2>
+          <div>
+            <label className="block text-sm font-medium mb-2">رمز عبور</label>
+            <div className="relative">
+              <Lock className="absolute right-3 top-3 text-gray-400" size={20} />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full pr-12 pl-4 py-3 border border-gray-300 rounded-2xl focus:border-[var(--color-primary)] focus:outline-none transition"
+                placeholder="رمز عبور خود را وارد کنید"
+                required
+              />
+            </div>
+          </div>
 
-          {appointments.length === 0 ? (
-            <div className="text-center py-12 text-[var(--color-text-light)]">
-              <div className="text-6xl mb-4">📅</div>
-              <p>شما هنوز هیچ نوبتی ثبت نکرده‌اید</p>
-              <a href="/appointment" className="text-[var(--color-primary)] hover:underline mt-2 inline-block">
-                ثبت نوبت جدید
-              </a>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {appointments.map((app) => (
-                <div
-                  key={app.id}
-                  className={`p-5 rounded-2xl border flex justify-between items-center transition ${
-                    app.status === 'cancelled'
-                      ? 'bg-gray-50 border-gray-200 opacity-60'
-                      : app.status === 'confirmed'
-                      ? 'bg-green-50 border-green-200'
-                      : 'bg-yellow-50 border-yellow-200'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <span className="font-bold text-lg">{app.day}</span>
-                      <span className="text-[var(--color-text-light)]">•</span>
-                      <span className="flex items-center gap-1">
-                        <Clock size={16} className="text-gray-500" />
-                        {app.time}
-                      </span>
-                      <span
-                        className={`text-xs px-3 py-1 rounded-full ${
-                          app.status === 'confirmed'
-                            ? 'bg-green-100 text-green-700'
-                            : app.status === 'cancelled'
-                            ? 'bg-gray-100 text-gray-700'
-                            : 'bg-yellow-100 text-yellow-700'
-                        }`}
-                      >
-                        {app.status === 'confirmed'
-                          ? 'تأیید شده'
-                          : app.status === 'cancelled'
-                          ? 'لغو شده'
-                          : 'در انتظار تأیید'}
-                      </span>
-                    </div>
-                    {app.description && (
-                      <p className="text-sm text-[var(--color-text-light)] mt-1">{app.description}</p>
-                    )}
-                    <div className="text-xs text-[var(--color-text-light)] mt-1">
-                      ثبت شده در: {new Date(app.createdAt).toLocaleDateString('fa-IR')}
-                    </div>
-                  </div>
-                  <div>
-                    {app.status !== 'cancelled' && (
-                      <button
-                        onClick={() => cancelAppointment(app.id)}
-                        disabled={cancelling === app.id}
-                        className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded-full transition"
-                      >
-                        <XCircle size={20} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary-light)] text-white py-4 rounded-2xl text-lg font-medium transition-all hover:shadow-xl disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            <LogIn size={20} />
+            {loading ? 'در حال ورود...' : 'ورود به پنل'}
+          </button>
+        </form>
       </div>
     </div>
   );

@@ -6,8 +6,8 @@ import Footer from './components/ui/footer';
 import ChatWidget from './components/ChatWidget';
 
 export const metadata: Metadata = {
-  title: 'نوبت‌دهی آنلاین مامایی خمینی‌شهر | زهره بصارت',
-  description: 'مطب زهره بصارت - کارشناس مامایی در خمینی‌شهر',
+  title: 'نوبت‌دهی آنلاین مامایی خمینی‌شهر | فرشته صادقی',
+  description: 'مطب فرشته صادقی - کارشناس مامایی در خمینی‌شهر',
 };
 
 export default function RootLayout({
