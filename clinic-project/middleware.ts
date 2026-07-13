@@ -7,17 +7,22 @@ export default withAuth(
     const token = req.nextauth.token;
     const path = req.nextUrl.pathname;
 
-    // اگر کاربر لاگین نکرده و به پنل دسترسی دارد → برگرد به لاگین
+    // ✅ مسیرهای API احراز هویت رو نادیده بگیر (اجازه بده همیشه کار کنن)
+    if (path.startsWith('/api/auth')) {
+      return NextResponse.next();
+    }
+
+    // اگه کاربر لاگین نکرده و به پنل رفته → ببر به لاگین
     if (!token && (path.startsWith('/dashboard') || path.startsWith('/admin'))) {
       return NextResponse.redirect(new URL('/login', req.url));
     }
 
-    // اگر کاربر نقش admin ندارد و می‌خواهد به /dashboard/admin برود → ممنوع
+    // اگه کاربر عادی بخواد بره به پنل ادمین → ممنوع
     if (path.startsWith('/dashboard/admin') && token?.role !== 'admin') {
       return NextResponse.redirect(new URL('/dashboard', req.url));
     }
 
-    // اگر کاربر نقش admin دارد و می‌خواهد به /dashboard برود → به admin هدایت شود
+    // اگه ادمین به داشبورد عادی رفت → ببر به ادمین
     if (path === '/dashboard' && token?.role === 'admin') {
       return NextResponse.redirect(new URL('/dashboard/admin', req.url));
     }
@@ -32,5 +37,5 @@ export default withAuth(
 );
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/admin/:path*'],
+  matcher: ['/dashboard/:path*', '/admin/:path*', '/api/auth/:path*'],
 };

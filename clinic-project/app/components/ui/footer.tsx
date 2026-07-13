@@ -112,7 +112,7 @@ export default function Footer() {
       <div className="border-t border-white/10">
         <div className="container py-6 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-white/50">
           <p>
-            © {currentYear} تمامی حقوق محفوظ است. مطب تخصصی مامایی زهره بصارت
+            © {currentYear} تمامی حقوق محفوظ است. مطب تخصصی مامایی فرشته صادقی
           </p>
           <p className="flex items-center gap-1">
             ساخته شده با <Heart size={14} className="text-[var(--color-primary)] fill-[var(--color-primary)]" /> در خمینی‌شهر

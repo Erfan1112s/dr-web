@@ -19,7 +19,7 @@ export default function Hero() {
           </h1>
           
           <p className="text-xl text-[var(--color-text-light)] mb-10 max-w-md">
-            زهره بصارت، کارشناس مامایی با بیش از ۱۵ سال تجربه
+                        فرشته صادقی، کارشناس مامایی با بیش از ۱۵ سال تجربه
           </p>
 
           <div className="flex flex-wrap gap-4">
