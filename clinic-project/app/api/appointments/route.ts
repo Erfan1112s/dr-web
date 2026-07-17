@@ -1,4 +1,3 @@
-// app/api/appointments/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
@@ -17,14 +16,6 @@ export async function GET(req: NextRequest) {
       where,
       orderBy: { createdAt: 'desc' },
     });
-
-    if (day) {
-      const allTimes = ['۴:۳۰', '۵:۰۰', '۵:۳۰', '۶:۰۰', '۶:۳۰', '۷:۰۰', '۷:۳۰', '۸:۰۰', '۸:۳۰'];
-      const bookedTimes = appointments.map((appointment) => appointment.time);
-      const available = allTimes.filter((time) => !bookedTimes.includes(time));
-
-      return NextResponse.json({ available });
-    }
 
     return NextResponse.json(appointments);
   } catch (error) {

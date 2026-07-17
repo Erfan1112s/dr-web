@@ -1,3 +1,4 @@
+// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -16,6 +17,7 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   appointments Appointment[]
+  chatMessages  ChatMessage[]
 
   @@map("users")
 }
@@ -35,4 +37,19 @@ model Appointment {
   user        User?    @relation(fields: [userId], references: [id])
 
   @@map("appointments")
+}
+
+// 🆕 جدول پیام‌های چت
+model ChatMessage {
+  id        Int      @id @default(autoincrement())
+  sessionId String   @map("session_id") // برای کاربران مهمان
+  userId    Int?     @map("user_id")
+  userMsg   String   @map("user_message")
+  botMsg    String   @map("bot_message")
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@map("chat_messages")
 }

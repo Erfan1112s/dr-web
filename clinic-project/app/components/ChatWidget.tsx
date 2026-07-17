@@ -4,6 +4,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSession } from 'next-auth/react';
 
 type Message = {
   role: 'user' | 'bot';
@@ -12,17 +13,28 @@ type Message = {
 };
 
 export default function ChatWidget() {
+  const { data: session } = useSession();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'bot',
-      content: 'سلام 🌸 من مامای هوشمند مطب خانم بصارت هستم. چطور می‌توانم به شما کمک کنم؟ (ساعت کاری، خدمات، نوبت‌دهی و ...)',
+      content: 'سلام 🌸 من مامای هوشمند مطب خانم فرشته صادقی هستم. چطور می‌توانم به شما کمک کنم؟ (ساعت کاری، خدمات، نوبت‌دهی و ...)',
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // ایجاد یا بازیابی sessionId
+  const getSessionId = () => {
+    let sessionId = localStorage.getItem('chatSessionId');
+    if (!sessionId) {
+      sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      localStorage.setItem('chatSessionId', sessionId);
+    }
+    return sessionId;
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -41,12 +53,22 @@ export default function ChatWidget() {
     setLoading(true);
 
     try {
+      const sessionId = getSessionId();
+      const userId = session?.user?.id || null;
+
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input, history: messages }),
+        body: JSON.stringify({
+          message: input,
+          sessionId,
+          userId,
+          history: messages,
+        }),
       });
+
       if (!res.ok) throw new Error('خطا در ارتباط');
+
       const data = await res.json();
       const botMsg: Message = {
         role: 'bot',
@@ -92,7 +114,7 @@ export default function ChatWidget() {
             {/* هدر */}
             <div className="bg-[var(--color-primary)] p-4 text-white flex justify-between items-center">
               <div>
-                <h3 className="font-bold">مامای هوشمند مطب بصارت</h3>
+                <h3 className="font-bold">مامای هوشمند مطب صادقی</h3>
                 <p className="text-xs opacity-90">پاسخگوی سوالات شما</p>
               </div>
               <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-[var(--color-primary-dark)] rounded-full">

@@ -36,11 +36,13 @@ export default function AppointmentPage() {
       const res = await fetch(`/api/appointment?day=${encodeURIComponent(day)}`);
       const data = await res.json();
       if (res.ok) {
-        setAvailableTimes(data.available);
+        setAvailableTimes(Array.isArray(data.available) ? data.available : []);
       } else {
+        setAvailableTimes([]);
         setError('خطا در دریافت ساعت‌های آزاد');
       }
     } catch (error) {
+      setAvailableTimes([]);
       setError('خطا در ارتباط با سرور');
     } finally {
       setLoadingTimes(false);
