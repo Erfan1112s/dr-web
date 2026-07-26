@@ -1,9 +1,12 @@
+// app/page.tsx
 import Header from './components/ui/Header';
 import Hero from './components/ui/Hero';
+import Stats from './components/ui/stats';
 import Services from './components/ui/services';
-import About from './components/ui/About';
-import FAQ from './components/ui/FAQ';
+import ArticlesPreview from './components/ui/ArticlesPreview';
+import Testimonials from './components/ui/Testimonials';
 import Contact from './components/ui/contect';
+import Footer from './components/ui/footer';
 
 export default function Home() {
   return (
@@ -11,11 +14,13 @@ export default function Home() {
       <Header />
       <main>
         <Hero />
+        <Stats />
         <Services />
-        <About />
-        <FAQ />
+        <ArticlesPreview />
+        <Testimonials />
         <Contact />
       </main>
+      <Footer />
     </>
   );
 }

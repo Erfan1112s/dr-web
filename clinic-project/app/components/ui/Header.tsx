@@ -5,17 +5,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { 
-  Menu, 
-  X, 
-  Phone, 
-  Calendar, 
-  User, 
-  LogOut, 
-  LogIn,
-  UserPlus,
-  ChevronDown
-} from 'lucide-react';
+import { Menu, X, Phone, Calendar, User, LogOut, LogIn, ChevronDown, Heart } from 'lucide-react';
 import { clinicInfo } from '../contect/clinicInfo';
 
 export default function Header() {
@@ -55,22 +45,24 @@ export default function Header() {
     { id: 'contact', label: 'تماس با ما' },
   ];
 
+  const navLinks = [
+    { href: '/documents', label: 'مدارک' },
+    { href: '/articles', label: 'مقالات' },
+  ];
+
   return (
-    <header 
+    <header
       className={`sticky top-0 z-50 transition-all duration-500 ${
-        scrolled 
-          ? 'bg-white/90 backdrop-blur-lg shadow-md' 
+        scrolled
+          ? 'bg-white/90 backdrop-blur-lg shadow-md'
           : 'bg-white shadow-sm'
       }`}
     >
       <div className="container flex items-center justify-between py-3 md:py-4">
         {/* لوگو */}
-        <Link 
-          href="/" 
-          className="flex items-center gap-3 group cursor-pointer"
-        >
+        <Link href="/" className="flex items-center gap-3 group">
           <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-light)] rounded-2xl flex items-center justify-center text-white text-xl md:text-2xl shadow-md group-hover:scale-110 transition-transform duration-300">
-            👩‍⚕️
+            <Heart size={24} fill="white" />
           </div>
           <div className="hidden sm:block">
             <div className="font-bold text-lg md:text-xl text-[var(--color-text-dark)] leading-tight">
@@ -93,11 +85,19 @@ export default function Header() {
               {item.label}
             </button>
           ))}
+          {navLinks.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="text-[var(--color-text-dark)] hover:text-[var(--color-primary)] font-medium transition-colors relative after:absolute after:bottom-0 after:right-0 after:w-0 after:h-0.5 after:bg-[var(--color-primary)] after:transition-all hover:after:w-full text-sm xl:text-base"
+            >
+              {item.label}
+            </Link>
+          ))}
         </nav>
 
-        {/* بخش راست (دکمه‌ها) */}
+        {/* بخش راست */}
         <div className="flex items-center gap-2 md:gap-4">
-          {/* شماره تلفن (دسکتاپ) */}
           <a
             href={`tel:${clinicInfo.phone}`}
             className="hidden lg:flex items-center gap-2 text-[var(--color-primary)] hover:text-[var(--color-primary-dark)] font-medium transition text-sm xl:text-base"
@@ -106,7 +106,6 @@ export default function Header() {
             {clinicInfo.phone}
           </a>
 
-          {/* دکمه رزرو نوبت (دسکتاپ) */}
           <Link
             href="/appointment"
             className="hidden md:flex items-center gap-2 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary-light)] hover:shadow-lg text-white px-5 py-2.5 rounded-full font-medium transition-all active:scale-95 text-sm xl:text-base"
@@ -115,7 +114,6 @@ export default function Header() {
             رزرو نوبت
           </Link>
 
-          {/* دکمه ورود / پروفایل کاربر */}
           {isAuthenticated ? (
             <div className="relative">
               <button
@@ -125,13 +123,12 @@ export default function Header() {
                 <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center text-sm font-bold">
                   {session.user?.name?.charAt(0) || 'U'}
                 </div>
-                <ChevronDown 
-                  size={16} 
+                <ChevronDown
+                  size={16}
                   className={`transition-transform duration-200 ${isUserMenuOpen ? 'rotate-180' : ''}`}
                 />
               </button>
 
-              {/* منوی کاربری dropdown */}
               {isUserMenuOpen && (
                 <div className="absolute left-0 top-full mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50">
                   <div className="px-4 py-3 border-b border-gray-100">
@@ -142,7 +139,6 @@ export default function Header() {
                       {isAdmin ? 'مدیر سیستم' : 'بیمار'}
                     </div>
                   </div>
-                  
                   <Link
                     href={isAdmin ? '/dashboard/admin' : '/dashboard'}
                     className="flex items-center gap-3 px-4 py-2.5 hover:bg-[var(--color-primary-lighter)] transition-colors text-sm"
@@ -151,7 +147,6 @@ export default function Header() {
                     <User size={16} className="text-[var(--color-primary)]" />
                     {isAdmin ? 'پنل مدیریت' : 'پنل کاربری'}
                   </Link>
-
                   <button
                     onClick={handleLogout}
                     className="flex items-center gap-3 px-4 py-2.5 hover:bg-red-50 transition-colors text-sm text-red-600 w-full text-right"
@@ -172,7 +167,6 @@ export default function Header() {
             </Link>
           )}
 
-          {/* دکمه منوی موبایل */}
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             className="lg:hidden text-[var(--color-text-dark)] p-2 hover:bg-gray-100 rounded-full transition"
@@ -183,11 +177,10 @@ export default function Header() {
         </div>
       </div>
 
-      {/* منوی موبایل (کشویی) */}
+      {/* منوی موبایل */}
       {isMenuOpen && (
-        <div className="lg:hidden bg-white/95 backdrop-blur-lg border-t border-gray-100 shadow-lg animate-fadeInUp">
+        <div className="lg:hidden bg-white/95 backdrop-blur-lg border-t border-gray-100 shadow-lg">
           <div className="container py-6 flex flex-col gap-1">
-            {/* آیتم‌های منو */}
             {navItems.map((item) => (
               <button
                 key={item.id}
@@ -197,10 +190,17 @@ export default function Header() {
                 {item.label}
               </button>
             ))}
-
-            <div className="border-t border-gray-100 my-2"></div>
-
-            {/* دکمه رزرو نوبت (موبایل) */}
+            {navLinks.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setIsMenuOpen(false)}
+                className="text-right py-3 px-4 hover:bg-[var(--color-primary-lighter)] rounded-xl transition-colors text-[var(--color-text-dark)] font-medium"
+              >
+                {item.label}
+              </Link>
+            ))}
+            <div className="border-t border-gray-100 my-2" />
             <Link
               href="/appointment"
               onClick={() => setIsMenuOpen(false)}
@@ -209,8 +209,6 @@ export default function Header() {
               <Calendar size={20} />
               رزرو نوبت آنلاین
             </Link>
-
-            {/* شماره تماس (موبایل) */}
             <a
               href={`tel:${clinicInfo.phone}`}
               className="flex items-center justify-center gap-2 text-[var(--color-primary)] border-2 border-[var(--color-primary)] py-4 rounded-2xl font-medium transition hover:bg-[var(--color-primary)] hover:text-white mt-2"
@@ -218,8 +216,6 @@ export default function Header() {
               <Phone size={20} />
               تماس با مطب
             </a>
-
-            {/* دکمه ورود/ثبت‌نام (موبایل) */}
             {isAuthenticated ? (
               <button
                 onClick={handleLogout}

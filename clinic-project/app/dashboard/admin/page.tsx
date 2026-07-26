@@ -4,8 +4,29 @@
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Calendar, Users, CheckCircle, XCircle, LogOut, Trash2, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
+import {
+  Calendar,
+  Users,
+  CheckCircle,
+  XCircle,
+  Clock,
+  LogOut,
+  Edit,
+  Trash2,
+  Plus,
+  Eye,
+  RefreshCw,
+  Search,
+  Send,
+  MessageCircle,
+  FileText,
+  Reply,
+} from 'lucide-react';
 
+// ============================================================
+// تایپ‌ها
+// ============================================================
 type Appointment = {
   id: number;
   patientName: string;
@@ -26,41 +47,73 @@ type User = {
   createdAt: string;
 };
 
-type ChatMessage = {
-  id?: number;
-  sessionId: string;
-  userId?: number;
-  userMsg: string;
-  botMsg: string;
-  isRead: boolean;
-  createdAt: string;
-  user?: {
-    id?: number;
-    name?: string;
-    phone?: string;
-  };
-};
-
 type ChatGroup = {
   sessionId: string;
   userId?: number;
   userName?: string;
   userPhone?: string;
-  messages: ChatMessage[];
+  messages: any[];
   lastMessage: string;
   createdAt: string;
   isRead: boolean;
 };
 
-type Tab = 'appointments' | 'users' | 'chats';
+type Article = {
+  id: number;
+  title: string;
+  slug: string;
+  summary: string;
+  category: string;
+  views: number;
+  publishedAt: string;
+};
 
+type Comment = {
+  id: number;
+  content: string;
+  author: string;
+  email?: string;
+  isApproved: boolean;
+  adminReply?: string;
+  createdAt: string;
+  article: { title: string; slug: string };
+  user?: { name: string };
+};
+
+// ============================================================
+// کامپوننت اصلی
+// ============================================================
 export default function AdminDashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<Tab>('appointments');
+
+  // -------- State‌ها --------
+  const [activeTab, setActiveTab] = useState<
+    'appointments' | 'users' | 'chats' | 'articles' | 'comments'
+  >('appointments');
+
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [chatGroups, setChatGroups] = useState<ChatGroup[]>([]);
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // فیلترهای نوبت‌ها
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterDay, setFilterDay] = useState('all');
+
+  // چت
+  const [selectedChat, setSelectedChat] = useState<ChatGroup | null>(null);
+  const [chatReply, setChatReply] = useState('');
+
+  // پاسخ به نظرات
+  const [replyingTo, setReplyingTo] = useState<number | null>(null);
+  const [replyContent, setReplyContent] = useState('');
+
+  // آمار
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -68,65 +121,83 @@ export default function AdminDashboard() {
     cancelled: 0,
     users: 0,
   });
-  const [chatMessages, setChatMessages] = useState<ChatGroup[]>([]);
-  const [chatLoading, setChatLoading] = useState(false);
-  const [selectedChat, setSelectedChat] = useState<ChatGroup | null>(null);
-  const [chatReply, setChatReply] = useState('');
 
-  const fetchData = async () => {
+  // ============================================================
+  // useEffect
+  // ============================================================
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/login');
+    }
+    if (session?.user?.role !== 'admin') {
+      router.push('/dashboard');
+    }
+    fetchAllData();
+  }, [status, session]);
+
+  // ============================================================
+  // توابع دریافت داده
+  // ============================================================
+  const fetchAllData = async () => {
     setLoading(true);
+    setError('');
     try {
-      const [appRes, userRes] = await Promise.all([
+      const [appRes, userRes, chatRes, articleRes, commentRes] = await Promise.all([
         fetch('/api/appointments'),
         fetch('/api/users'),
+        fetch('/api/chat/admin'),
+        fetch('/api/articles?limit=100'),
+        fetch('/api/comments/admin'),
       ]);
-      const appData = await appRes.json();
-      const userData = await userRes.json();
+
+      const appData = appRes.ok ? await appRes.json() : [];
+      const userData = userRes.ok ? await userRes.json() : [];
+      const chatData = chatRes.ok ? await chatRes.json() : {};
+      const articleData = articleRes.ok ? await articleRes.json() : { articles: [] };
+      const commentData = commentRes.ok ? await commentRes.json() : [];
+
       setAppointments(appData);
       setUsers(userData);
+      setArticles(articleData.articles || []);
+      setComments(commentData);
 
+      // محاسبه آمار
       const total = appData.length;
       const pending = appData.filter((a: Appointment) => a.status === 'pending').length;
       const confirmed = appData.filter((a: Appointment) => a.status === 'confirmed').length;
       const cancelled = appData.filter((a: Appointment) => a.status === 'cancelled').length;
       setStats({ total, pending, confirmed, cancelled, users: userData.length });
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const fetchChatMessages = async () => {
-    setChatLoading(true);
-    try {
-      const res = await fetch('/api/chat/admin');
-      const data = await res.json();
-      if (res.ok) {
-        const groups: ChatGroup[] = Object.entries(data.groups || {}).map(([sessionId, msgs]) => {
-          const typedMessages = (Array.isArray(msgs) ? msgs : []) as ChatMessage[];
-          const lastMsg = typedMessages[0] ?? { userMsg: '', createdAt: new Date().toISOString(), isRead: false };
-          const user = lastMsg.user;
+      // گروه‌بندی چت‌ها
+      if (chatData.groups) {
+        const groups: ChatGroup[] = Object.keys(chatData.groups).map((sessionId) => {
+          const msgs = chatData.groups[sessionId];
+          const lastMsg = msgs[0] || {};
+          const user = msgs[0]?.user;
           return {
             sessionId,
             userId: user?.id,
             userName: user?.name || 'کاربر مهمان',
             userPhone: user?.phone || '-',
-            messages: typedMessages,
+            messages: msgs,
             lastMessage: lastMsg.userMsg || '',
             createdAt: lastMsg.createdAt || new Date().toISOString(),
-            isRead: typedMessages.some((message) => !message.isRead),
+            isRead: msgs.some((m: any) => !m.isRead),
           };
         });
-        setChatMessages(groups);
+        setChatGroups(groups);
       }
     } catch (error) {
-      console.error('Error fetching chats:', error);
+      console.error('❌ Error fetching data:', error);
+      setError('خطا در دریافت اطلاعات');
     } finally {
-      setChatLoading(false);
+      setLoading(false);
     }
   };
 
+  // ============================================================
+  // توابع مدیریت نوبت‌ها
+  // ============================================================
   const updateAppointmentStatus = async (id: number, status: string) => {
     try {
       const res = await fetch('/api/appointments', {
@@ -135,51 +206,128 @@ export default function AdminDashboard() {
         body: JSON.stringify({ id, status }),
       });
       if (res.ok) {
-        setAppointments((prev) => prev.map((appointment) => (appointment.id === id ? { ...appointment, status } : appointment)));
-        void fetchData();
+        setAppointments((prev) =>
+          prev.map((a) => (a.id === id ? { ...a, status } : a))
+        );
+        fetchAllData();
       }
     } catch (error) {
-      console.error('Error updating appointment:', error);
+      console.error('❌ Error updating appointment:', error);
+      alert('خطا در به‌روزرسانی نوبت');
     }
   };
 
   const deleteAppointment = async (id: number) => {
-    if (!window.confirm('آیا از حذف این نوبت اطمینان دارید؟')) return;
+    if (!confirm('آیا از حذف این نوبت اطمینان دارید؟')) return;
     try {
       const res = await fetch(`/api/appointments?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
-        setAppointments((prev) => prev.filter((appointment) => appointment.id !== id));
-        void fetchData();
+        setAppointments((prev) => prev.filter((a) => a.id !== id));
+        fetchAllData();
       }
     } catch (error) {
-      console.error('Error deleting appointment:', error);
+      console.error('❌ Error deleting appointment:', error);
+      alert('خطا در حذف نوبت');
     }
   };
 
-  const replyToChat = async (sessionId: string, reply: string) => {
-    if (!reply.trim()) return;
-    window.alert(`پاسخ به ${sessionId}: ${reply}`);
-    setChatReply('');
+  // ============================================================
+  // توابع مدیریت مقالات
+  // ============================================================
+  const deleteArticle = async (id: number) => {
+    if (!confirm('آیا از حذف این مقاله اطمینان دارید؟')) return;
+    try {
+      const res = await fetch(`/api/articles/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setArticles((prev) => prev.filter((a) => a.id !== id));
+      }
+    } catch (error) {
+      console.error('❌ Error deleting article:', error);
+      alert('خطا در حذف مقاله');
+    }
   };
 
-  useEffect(() => {
-    if (status === 'loading') return;
-
-    const loadDashboardData = async () => {
-      if (status === 'unauthenticated') {
-        router.push('/login');
-        return;
+  // ============================================================
+  // توابع مدیریت نظرات
+  // ============================================================
+  const approveComment = async (id: number) => {
+    try {
+      const res = await fetch('/api/comments/admin', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, isApproved: true }),
+      });
+      if (res.ok) {
+        setComments((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, isApproved: true } : c))
+        );
       }
-      if (session?.user?.role !== 'admin') {
-        router.push('/dashboard');
-        return;
+    } catch (error) {
+      console.error('❌ Error approving comment:', error);
+      alert('خطا در تایید نظر');
+    }
+  };
+
+  const deleteComment = async (id: number) => {
+    if (!confirm('آیا از حذف این نظر اطمینان دارید؟')) return;
+    try {
+      const res = await fetch(`/api/comments/admin?id=${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setComments((prev) => prev.filter((c) => c.id !== id));
       }
-      await fetchData();
-    };
+    } catch (error) {
+      console.error('❌ Error deleting comment:', error);
+      alert('خطا در حذف نظر');
+    }
+  };
 
-    void loadDashboardData();
-  }, [router, session?.user?.role, status]);
+  // پاسخ به نظر
+  const replyToComment = async (id: number, reply: string) => {
+    if (!reply.trim()) return;
 
+    try {
+      const res = await fetch('/api/comments/admin', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, adminReply: reply, isApproved: true }),
+      });
+      if (res.ok) {
+        setComments((prev) =>
+          prev.map((c) =>
+            c.id === id ? { ...c, adminReply: reply, isApproved: true } : c
+          )
+        );
+        setReplyingTo(null);
+        setReplyContent('');
+      }
+    } catch (error) {
+      console.error('❌ Error replying to comment:', error);
+      alert('خطا در ارسال پاسخ');
+    }
+  };
+
+  // ============================================================
+  // فیلتر نوبت‌ها
+  // ============================================================
+  const filteredAppointments = appointments
+    .filter((a) => {
+      if (searchTerm) {
+        return (
+          a.patientName.includes(searchTerm) ||
+          a.patientPhone.includes(searchTerm)
+        );
+      }
+      return true;
+    })
+    .filter((a) => (filterStatus === 'all' ? true : a.status === filterStatus))
+    .filter((a) => (filterDay === 'all' ? true : a.day === filterDay))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const days = Array.from(new Set(appointments.map((a) => a.day)));
+
+  // ============================================================
+  // رندر
+  // ============================================================
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -189,24 +337,44 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg-light)] py-12">
-      <div className="container max-w-6xl mx-auto px-4">
+    <div className="min-h-screen bg-[var(--color-bg-light)] py-8">
+      <div className="container max-w-7xl mx-auto px-4">
+        {/* ========== هدر ========== */}
         <div className="bg-white rounded-3xl shadow-lg p-6 mb-8 border border-gray-100">
           <div className="flex justify-between items-center flex-wrap gap-4">
             <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">👨‍💼 پنل مدیریت</h1>
-              <p className="text-[var(--color-text-light)] text-sm">{session?.user?.name} عزیز خوش آمدید</p>
+              <h1 className="text-2xl font-bold flex items-center gap-2">
+                👨‍💼 پنل مدیریت
+              </h1>
+              <p className="text-[var(--color-text-light)] text-sm">
+                {session?.user?.name} عزیز خوش آمدید
+              </p>
             </div>
-            <button
-              onClick={() => router.push('/')}
-              className="flex items-center gap-2 text-gray-500 hover:text-red-500 transition px-4 py-2 bg-gray-100 rounded-full"
-            >
-              <LogOut size={18} />
-              خروج از پنل
-            </button>
+            <div className="flex gap-3 flex-wrap">
+              <button
+                onClick={fetchAllData}
+                className="flex items-center gap-2 text-[var(--color-primary)] px-4 py-2 bg-[var(--color-primary-lighter)] rounded-full hover:bg-[var(--color-primary)] hover:text-white transition"
+              >
+                <RefreshCw size={18} />
+                بروزرسانی
+              </button>
+              <button
+                onClick={() => router.push('/')}
+                className="flex items-center gap-2 text-gray-500 hover:text-red-500 transition px-4 py-2 bg-gray-100 rounded-full"
+              >
+                <LogOut size={18} />
+                خروج
+              </button>
+            </div>
           </div>
+          {error && (
+            <div className="mt-4 bg-red-50 border border-red-200 text-red-600 p-4 rounded-2xl">
+              {error}
+            </div>
+          )}
         </div>
 
+        {/* ========== کارت‌های آمار ========== */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
             <div className="text-2xl font-bold text-[var(--color-primary)]">{stats.total}</div>
@@ -230,10 +398,11 @@ export default function AdminDashboard() {
           </div>
         </div>
 
+        {/* ========== تب‌ها ========== */}
         <div className="flex flex-wrap gap-2 mb-6">
           <button
             onClick={() => setActiveTab('appointments')}
-            className={`px-6 py-2 rounded-full transition ${
+            className={`px-5 py-2 rounded-full transition text-sm ${
               activeTab === 'appointments'
                 ? 'bg-[var(--color-primary)] text-white'
                 : 'bg-white text-[var(--color-text-dark)] hover:bg-gray-50'
@@ -243,7 +412,7 @@ export default function AdminDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('users')}
-            className={`px-6 py-2 rounded-full transition ${
+            className={`px-5 py-2 rounded-full transition text-sm ${
               activeTab === 'users'
                 ? 'bg-[var(--color-primary)] text-white'
                 : 'bg-white text-[var(--color-text-dark)] hover:bg-gray-50'
@@ -252,36 +421,91 @@ export default function AdminDashboard() {
             👤 کاربران
           </button>
           <button
-            onClick={() => {
-              setActiveTab('chats');
-              void fetchChatMessages();
-            }}
-            className={`px-6 py-2 rounded-full transition ${
+            onClick={() => setActiveTab('chats')}
+            className={`px-5 py-2 rounded-full transition text-sm ${
               activeTab === 'chats'
                 ? 'bg-[var(--color-primary)] text-white'
                 : 'bg-white text-[var(--color-text-dark)] hover:bg-gray-50'
             }`}
           >
             💬 چت‌ها
-            {chatMessages.some((chat) => !chat.isRead) && (
-              <span className="ml-2 bg-red-500 text-white text-xs w-5 h-5 rounded-full inline-flex items-center justify-center">
-                {chatMessages.filter((chat) => !chat.isRead).length}
+            {chatGroups.filter((c) => !c.isRead).length > 0 && (
+              <span className="bg-red-500 text-white text-xs w-5 h-5 rounded-full inline-flex items-center justify-center mr-1">
+                {chatGroups.filter((c) => !c.isRead).length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('articles')}
+            className={`px-5 py-2 rounded-full transition text-sm ${
+              activeTab === 'articles'
+                ? 'bg-[var(--color-primary)] text-white'
+                : 'bg-white text-[var(--color-text-dark)] hover:bg-gray-50'
+            }`}
+          >
+            📝 مقالات
+          </button>
+          <button
+            onClick={() => setActiveTab('comments')}
+            className={`px-5 py-2 rounded-full transition text-sm ${
+              activeTab === 'comments'
+                ? 'bg-[var(--color-primary)] text-white'
+                : 'bg-white text-[var(--color-text-dark)] hover:bg-gray-50'
+            }`}
+          >
+            💬 نظرات
+            {comments.filter((c) => !c.isApproved).length > 0 && (
+              <span className="bg-red-500 text-white text-xs w-5 h-5 rounded-full inline-flex items-center justify-center mr-1">
+                {comments.filter((c) => !c.isApproved).length}
               </span>
             )}
           </button>
         </div>
 
+        {/* ========== محتوای تب‌ها ========== */}
         <div className="bg-white rounded-3xl shadow-lg p-6 border border-gray-100">
+          {/* ===== تب نوبت‌ها ===== */}
           {activeTab === 'appointments' && (
             <div>
-              <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-                <Calendar className="text-[var(--color-primary)]" />
-                مدیریت نوبت‌ها
-              </h2>
-              {appointments.length === 0 ? (
+              <div className="flex flex-col md:flex-row gap-4 mb-6">
+                <div className="flex-1 relative">
+                  <Search className="absolute right-3 top-3 text-gray-400" size={20} />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="جستجو بر اساس نام یا موبایل..."
+                    className="w-full pr-12 pl-4 py-3 border border-gray-300 rounded-2xl focus:border-[var(--color-primary)] focus:outline-none"
+                  />
+                </div>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="px-4 py-3 border border-gray-300 rounded-2xl focus:border-[var(--color-primary)] focus:outline-none bg-white"
+                >
+                  <option value="all">همه وضعیت‌ها</option>
+                  <option value="pending">در انتظار</option>
+                  <option value="confirmed">تأیید شده</option>
+                  <option value="cancelled">لغو شده</option>
+                </select>
+                <select
+                  value={filterDay}
+                  onChange={(e) => setFilterDay(e.target.value)}
+                  className="px-4 py-3 border border-gray-300 rounded-2xl focus:border-[var(--color-primary)] focus:outline-none bg-white"
+                >
+                  <option value="all">همه روزها</option>
+                  {days.map((day) => (
+                    <option key={day} value={day}>
+                      {day}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {filteredAppointments.length === 0 ? (
                 <div className="text-center py-12 text-[var(--color-text-light)]">
                   <div className="text-6xl mb-4">📅</div>
-                  <p>هیچ نوبتی ثبت نشده است</p>
+                  <p>هیچ نوبتی با این فیلترها یافت نشد</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -297,50 +521,53 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {appointments.map((appointment) => (
-                        <tr key={appointment.id} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="p-3 font-medium">{appointment.patientName}</td>
-                          <td className="p-3 text-gray-600">{appointment.patientPhone}</td>
-                          <td className="p-3">{appointment.day}</td>
-                          <td className="p-3">{appointment.time}</td>
+                      {filteredAppointments.map((app) => (
+                        <tr key={app.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
+                          <td className="p-3 font-medium">{app.patientName}</td>
+                          <td className="p-3 text-gray-600">{app.patientPhone}</td>
+                          <td className="p-3">{app.day}</td>
+                          <td className="p-3">{app.time}</td>
                           <td className="p-3">
                             <span
                               className={`text-xs px-3 py-1 rounded-full ${
-                                appointment.status === 'confirmed'
+                                app.status === 'confirmed'
                                   ? 'bg-green-100 text-green-700'
-                                  : appointment.status === 'cancelled'
+                                  : app.status === 'cancelled'
                                   ? 'bg-gray-100 text-gray-700'
                                   : 'bg-yellow-100 text-yellow-700'
                               }`}
                             >
-                              {appointment.status === 'confirmed'
+                              {app.status === 'confirmed'
                                 ? 'تأیید شده'
-                                : appointment.status === 'cancelled'
+                                : app.status === 'cancelled'
                                 ? 'لغو شده'
                                 : 'در انتظار'}
                             </span>
                           </td>
                           <td className="p-3">
-                            <div className="flex gap-2">
-                              {appointment.status === 'pending' && (
-                                <button
-                                  onClick={() => void updateAppointmentStatus(appointment.id, 'confirmed')}
-                                  className="p-1.5 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition"
-                                >
-                                  <CheckCircle size={18} />
-                                </button>
-                              )}
-                              {appointment.status === 'pending' && (
-                                <button
-                                  onClick={() => void updateAppointmentStatus(appointment.id, 'cancelled')}
-                                  className="p-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"
-                                >
-                                  <XCircle size={18} />
-                                </button>
+                            <div className="flex flex-wrap gap-2">
+                              {app.status === 'pending' && (
+                                <>
+                                  <button
+                                    onClick={() => updateAppointmentStatus(app.id, 'confirmed')}
+                                    className="p-2 bg-green-100 text-green-600 rounded-xl hover:bg-green-200 transition"
+                                    title="تأیید"
+                                  >
+                                    <CheckCircle size={18} />
+                                  </button>
+                                  <button
+                                    onClick={() => updateAppointmentStatus(app.id, 'cancelled')}
+                                    className="p-2 bg-red-100 text-red-600 rounded-xl hover:bg-red-200 transition"
+                                    title="لغو"
+                                  >
+                                    <XCircle size={18} />
+                                  </button>
+                                </>
                               )}
                               <button
-                                onClick={() => void deleteAppointment(appointment.id)}
-                                className="p-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
+                                onClick={() => deleteAppointment(app.id)}
+                                className="p-2 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition"
+                                title="حذف"
                               >
                                 <Trash2 size={18} />
                               </button>
@@ -352,9 +579,13 @@ export default function AdminDashboard() {
                   </table>
                 </div>
               )}
+              <div className="mt-4 text-sm text-[var(--color-text-light)]">
+                {filteredAppointments.length} نوبت از {appointments.length} نوبت
+              </div>
             </div>
           )}
 
+          {/* ===== تب کاربران ===== */}
           {activeTab === 'users' && (
             <div>
               <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
@@ -375,25 +606,36 @@ export default function AdminDashboard() {
                         <th className="text-right p-3">موبایل</th>
                         <th className="text-right p-3">نقش</th>
                         <th className="text-right p-3">تاریخ ثبت</th>
+                        <th className="text-right p-3">تعداد نوبت</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {users.map((user) => (
-                        <tr key={user.id} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="p-3 font-medium">{user.name}</td>
-                          <td className="p-3 text-gray-600">{user.phone}</td>
-                          <td className="p-3">
-                            <span
-                              className={`text-xs px-3 py-1 rounded-full ${
-                                user.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                              }`}
-                            >
-                              {user.role === 'admin' ? 'مدیر' : 'بیمار'}
-                            </span>
-                          </td>
-                          <td className="p-3 text-gray-600">{new Date(user.createdAt).toLocaleDateString('fa-IR')}</td>
-                        </tr>
-                      ))}
+                      {users.map((user) => {
+                        const userApps = appointments.filter(
+                          (a) => a.patientPhone === user.phone
+                        );
+                        return (
+                          <tr key={user.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
+                            <td className="p-3 font-medium">{user.name}</td>
+                            <td className="p-3 text-gray-600">{user.phone}</td>
+                            <td className="p-3">
+                              <span
+                                className={`text-xs px-3 py-1 rounded-full ${
+                                  user.role === 'admin'
+                                    ? 'bg-purple-100 text-purple-700'
+                                    : 'bg-blue-100 text-blue-700'
+                                }`}
+                              >
+                                {user.role === 'admin' ? 'مدیر' : 'بیمار'}
+                              </span>
+                            </td>
+                            <td className="p-3 text-gray-600">
+                              {new Date(user.createdAt).toLocaleDateString('fa-IR')}
+                            </td>
+                            <td className="p-3 text-center">{userApps.length}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -401,12 +643,15 @@ export default function AdminDashboard() {
             </div>
           )}
 
+          {/* ===== تب چت‌ها ===== */}
           {activeTab === 'chats' && (
             <div>
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold flex items-center gap-2">💬 مدیریت چت‌ها</h2>
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  💬 مدیریت چت‌ها
+                </h2>
                 <button
-                  onClick={() => void fetchChatMessages()}
+                  onClick={fetchAllData}
                   className="flex items-center gap-2 text-[var(--color-primary)] px-4 py-2 bg-[var(--color-primary-lighter)] rounded-full hover:bg-[var(--color-primary)] hover:text-white transition"
                 >
                   <RefreshCw size={18} />
@@ -414,11 +659,7 @@ export default function AdminDashboard() {
                 </button>
               </div>
 
-              {chatLoading ? (
-                <div className="flex justify-center py-12">
-                  <div className="animate-spin rounded-full h-8 w-8 border-4 border-[var(--color-primary)] border-t-transparent"></div>
-                </div>
-              ) : chatMessages.length === 0 ? (
+              {chatGroups.length === 0 ? (
                 <div className="text-center py-12 text-[var(--color-text-light)]">
                   <div className="text-6xl mb-4">💬</div>
                   <p>هنوز هیچ پیامی در چت ثبت نشده است</p>
@@ -426,7 +667,7 @@ export default function AdminDashboard() {
               ) : (
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                    {chatMessages.map((group) => (
+                    {chatGroups.map((group) => (
                       <div
                         key={group.sessionId}
                         onClick={() => setSelectedChat(group)}
@@ -441,16 +682,22 @@ export default function AdminDashboard() {
                             <div className="font-medium">
                               {group.userName}
                               {!group.isRead && (
-                                <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full mr-2">جدید</span>
+                                <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full mr-2">
+                                  جدید
+                                </span>
                               )}
                             </div>
-                            <div className="text-sm text-[var(--color-text-light)]">{group.userPhone}</div>
+                            <div className="text-sm text-[var(--color-text-light)]">
+                              {group.userPhone}
+                            </div>
                           </div>
                           <div className="text-xs text-[var(--color-text-light)]">
                             {new Date(group.createdAt).toLocaleDateString('fa-IR')}
                           </div>
                         </div>
-                        <div className="text-sm text-gray-600 mt-2 line-clamp-2">{group.lastMessage}</div>
+                        <div className="text-sm text-gray-600 mt-2 line-clamp-2">
+                          {group.lastMessage}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -464,43 +711,46 @@ export default function AdminDashboard() {
                             {selectedChat.userPhone} • {selectedChat.messages.length} پیام
                           </div>
                         </div>
-
                         <div className="flex-1 overflow-y-auto space-y-3 mb-4">
-                          {selectedChat.messages.map((message, index) => (
-                            <div key={`${message.sessionId}-${index}`}>
+                          {selectedChat.messages.map((msg: any, idx: number) => (
+                            <div key={idx}>
                               <div className="bg-white rounded-2xl p-3 shadow-sm">
                                 <div className="text-sm font-medium text-[var(--color-primary)]">کاربر:</div>
-                                <div className="text-sm text-gray-700">{message.userMsg}</div>
+                                <div className="text-sm text-gray-700">{msg.userMsg}</div>
                               </div>
                               <div className="bg-[var(--color-primary-bg)] rounded-2xl p-3 shadow-sm mt-2">
                                 <div className="text-sm font-medium text-[var(--color-primary)]">چت‌بات:</div>
-                                <div className="text-sm text-gray-700">{message.botMsg}</div>
+                                <div className="text-sm text-gray-700">{msg.botMsg}</div>
                               </div>
                               <div className="text-xs text-[var(--color-text-light)] text-left mt-1">
-                                {new Date(message.createdAt).toLocaleString('fa-IR')}
+                                {new Date(msg.createdAt).toLocaleString('fa-IR')}
                               </div>
                             </div>
                           ))}
                         </div>
-
                         <div className="border-t border-gray-200 pt-3">
                           <div className="flex gap-2">
                             <input
                               type="text"
                               value={chatReply}
-                              onChange={(event) => setChatReply(event.target.value)}
+                              onChange={(e) => setChatReply(e.target.value)}
                               placeholder="پاسخ به کاربر..."
                               className="flex-1 px-4 py-2 border border-gray-300 rounded-2xl focus:border-[var(--color-primary)] focus:outline-none"
                             />
                             <button
-                              onClick={() => void replyToChat(selectedChat.sessionId, chatReply)}
+                              onClick={() => {
+                                if (chatReply.trim()) {
+                                  alert(`پاسخ به ${selectedChat.userName}:\n${chatReply}`);
+                                  setChatReply('');
+                                }
+                              }}
                               className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-2xl hover:bg-[var(--color-primary-dark)] transition"
                             >
-                              ارسال
+                              <Send size={18} />
                             </button>
                           </div>
                           <div className="text-xs text-[var(--color-text-light)] mt-2">
-                            ⚠️ این پاسخ فعلاً به صورت اطلاع‌رسانی است. برای ارسال واقعی، API ارسال پیام باید پیاده‌سازی شود.
+                            ⚠️ این پاسخ فعلاً به صورت اطلاع‌رسانی است.
                           </div>
                         </div>
                       </>
@@ -513,6 +763,210 @@ export default function AdminDashboard() {
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ===== تب مقالات ===== */}
+          {activeTab === 'articles' && (
+            <div>
+              <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  📝 مدیریت مقالات
+                </h2>
+                <Link
+                  href="/dashboard/admin/articles/new"
+                  className="flex items-center gap-2 bg-[var(--color-primary)] text-white px-5 py-2.5 rounded-full hover:shadow-lg transition"
+                >
+                  <Plus size={18} />
+                  مقاله جدید
+                </Link>
+              </div>
+
+              {articles.length === 0 ? (
+                <div className="text-center py-12 text-[var(--color-text-light)]">
+                  <div className="text-6xl mb-4">📝</div>
+                  <p>هیچ مقاله‌ای منتشر نشده است</p>
+                  <Link
+                    href="/dashboard/admin/articles/new"
+                    className="text-[var(--color-primary)] hover:underline mt-2 inline-block"
+                  >
+                    اولین مقاله را بنویسید
+                  </Link>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-right p-3">عنوان</th>
+                        <th className="text-right p-3">دسته‌بندی</th>
+                        <th className="text-right p-3">بازدید</th>
+                        <th className="text-right p-3">تاریخ</th>
+                        <th className="text-right p-3">عملیات</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {articles.map((article) => (
+                        <tr key={article.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
+                          <td className="p-3 font-medium">{article.title}</td>
+                          <td className="p-3">
+                            <span className="text-xs px-3 py-1 bg-[var(--color-primary-lighter)] text-[var(--color-primary)] rounded-full">
+                              {article.category}
+                            </span>
+                          </td>
+                          <td className="p-3 text-gray-600">{article.views}</td>
+                          <td className="p-3 text-gray-600">
+                            {new Date(article.publishedAt).toLocaleDateString('fa-IR')}
+                          </td>
+                          <td className="p-3">
+                            <div className="flex flex-wrap gap-2">
+                              <Link
+                                href={`/articles/${article.slug}`}
+                                target="_blank"
+                                className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition"
+                                title="مشاهده"
+                              >
+                                <Eye size={18} />
+                              </Link>
+                              <Link
+                                href={`/dashboard/admin/articles/${article.id}/edit`}
+                                className="p-2 bg-yellow-50 text-yellow-600 rounded-xl hover:bg-yellow-100 transition"
+                                title="ویرایش"
+                              >
+                                <Edit size={18} />
+                              </Link>
+                              <button
+                                onClick={() => deleteArticle(article.id)}
+                                className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition"
+                                title="حذف"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ===== تب نظرات ===== */}
+          {activeTab === 'comments' && (
+            <div>
+              <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+                💬 مدیریت نظرات
+              </h2>
+
+              {comments.length === 0 ? (
+                <div className="text-center py-12 text-[var(--color-text-light)]">
+                  <div className="text-6xl mb-4">💬</div>
+                  <p>هیچ نظری ثبت نشده است</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-right p-3">نویسنده</th>
+                        <th className="text-right p-3">متن نظر</th>
+                        <th className="text-right p-3">مقاله</th>
+                        <th className="text-right p-3">وضعیت</th>
+                        <th className="text-right p-3">پاسخ ادمین</th>
+                        <th className="text-right p-3">تاریخ</th>
+                        <th className="text-right p-3">عملیات</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {comments.map((comment) => (
+                        <tr key={comment.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
+                          <td className="p-3 font-medium">{comment.author}</td>
+                          <td className="p-3 text-gray-600 max-w-[200px] truncate">
+                            {comment.content}
+                          </td>
+                          <td className="p-3">
+                            <Link
+                              href={`/articles/${comment.article.slug}`}
+                              target="_blank"
+                              className="text-[var(--color-primary)] hover:underline"
+                            >
+                              {comment.article.title}
+                            </Link>
+                          </td>
+                          <td className="p-3">
+                            <span
+                              className={`text-xs px-3 py-1 rounded-full ${
+                                comment.isApproved
+                                  ? 'bg-green-100 text-green-700'
+                                  : 'bg-yellow-100 text-yellow-700'
+                              }`}
+                            >
+                              {comment.isApproved ? 'تأیید شده' : 'در انتظار'}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            {comment.adminReply ? (
+                              <span className="text-xs text-green-600">✅ پاسخ داده شده</span>
+                            ) : (
+                              <span className="text-xs text-gray-400">بدون پاسخ</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-gray-600">
+                            {new Date(comment.createdAt).toLocaleDateString('fa-IR')}
+                          </td>
+                          <td className="p-3">
+                            <div className="flex flex-wrap gap-2">
+                              {!comment.isApproved && (
+                                <button
+                                  onClick={() => approveComment(comment.id)}
+                                  className="p-2 bg-green-100 text-green-600 rounded-xl hover:bg-green-200 transition"
+                                  title="تأیید"
+                                >
+                                  <CheckCircle size={18} />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
+                                className="p-2 bg-blue-100 text-blue-600 rounded-xl hover:bg-blue-200 transition"
+                                title="پاسخ"
+                              >
+                                <Reply size={18} />
+                              </button>
+                              <button
+                                onClick={() => deleteComment(comment.id)}
+                                className="p-2 bg-red-100 text-red-600 rounded-xl hover:bg-red-200 transition"
+                                title="حذف"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
+                            {/* فرم پاسخ */}
+                            {replyingTo === comment.id && (
+                              <div className="mt-3 flex gap-2">
+                                <input
+                                  type="text"
+                                  value={replyContent}
+                                  onChange={(e) => setReplyContent(e.target.value)}
+                                  placeholder="پاسخ خود را وارد کنید..."
+                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:border-[var(--color-primary)] focus:outline-none text-sm"
+                                />
+                                <button
+                                  onClick={() => replyToComment(comment.id, replyContent)}
+                                  className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-xl hover:bg-[var(--color-primary-dark)] transition text-sm"
+                                >
+                                  <Send size={16} />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>

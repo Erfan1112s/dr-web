@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-, "scripts/create-admin.js"  ],
+, "scripts/create-admin.js", "scripts/fix-slugs.js"  ],
   "exclude": ["node_modules"]
 }

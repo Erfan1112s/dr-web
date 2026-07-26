@@ -1,10 +1,12 @@
 // app/appointment/page.tsx
 'use client';
 
+import { useSession } from 'next-auth/react';
 import { useState, useEffect } from 'react';
 import { Calendar, Clock, User, Phone, MessageSquare, CheckCircle, Loader2 } from 'lucide-react';
 
 export default function AppointmentPage() {
+  const { data: session } = useSession();
   const [step, setStep] = useState(1);
   const [selectedDay, setSelectedDay] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string>('');
@@ -33,7 +35,8 @@ export default function AppointmentPage() {
     setLoadingTimes(true);
     setError('');
     try {
-      const res = await fetch(`/api/appointment?day=${encodeURIComponent(day)}`);
+      // ✅ مسیر درست: /api/appointments با پارامتر day
+      const res = await fetch(`/api/appointments?day=${encodeURIComponent(day)}`);
       const data = await res.json();
       if (res.ok) {
         setAvailableTimes(Array.isArray(data.available) ? data.available : []);
@@ -69,7 +72,9 @@ export default function AppointmentPage() {
     setError('');
 
     try {
-      const response = await fetch('/api/appointment', {
+      const userId = session?.user?.id || null;
+      // ✅ مسیر درست: /api/appointments
+      const response = await fetch('/api/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -78,6 +83,7 @@ export default function AppointmentPage() {
           name: formData.name,
           phone: formData.phone,
           description: formData.description,
+          userId,
         }),
       });
 

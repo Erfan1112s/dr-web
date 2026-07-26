@@ -18,6 +18,7 @@ model User {
 
   appointments Appointment[]
   chatMessages  ChatMessage[]
+  comments      Comment[]
 
   @@map("users")
 }
@@ -30,7 +31,7 @@ model Appointment {
   time        String
   description String?
   status      String   @default("pending")
-  userId      Int?     @map("user_id")
+  userId      Int?     @map("user_id")   // ← این فیلد باید باشد
   createdAt   DateTime @default(now()) @map("created_at")
   smsSent     Boolean  @default(false) @map("sms_sent")
 
@@ -38,11 +39,9 @@ model Appointment {
 
   @@map("appointments")
 }
-
-// 🆕 جدول پیام‌های چت
 model ChatMessage {
   id        Int      @id @default(autoincrement())
-  sessionId String   @map("session_id") // برای کاربران مهمان
+  sessionId String   @map("session_id")
   userId    Int?     @map("user_id")
   userMsg   String   @map("user_message")
   botMsg    String   @map("bot_message")
@@ -52,4 +51,44 @@ model ChatMessage {
   user      User?    @relation(fields: [userId], references: [id])
 
   @@map("chat_messages")
+}
+
+// 🆕 مدل مقاله
+model Article {
+  id          Int      @id @default(autoincrement())
+  title       String
+  slug        String   @unique
+  summary     String
+  content     String
+  image       String?
+  pdfUrl      String?  // ← اضافه شد
+  category    String
+  tags        String?
+  author      String   @default("فرشته صادقی")
+  views       Int      @default(0)
+  publishedAt DateTime @default(now()) @map("published_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  comments    Comment[]
+
+  @@map("articles")
+}
+
+// 🆕 مدل نظر
+model Comment {
+  id          Int      @id @default(autoincrement())
+  content     String
+  author      String
+  email       String?
+  articleId   Int      @map("article_id")
+  userId      Int?     @map("user_id")
+  isApproved  Boolean  @default(false) @map("is_approved")
+  adminReply  String?  @map("admin_reply") // ← جدید
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  article     Article  @relation(fields: [articleId], references: [id])
+  user        User?    @relation(fields: [userId], references: [id])
+
+  @@map("comments")
 }
