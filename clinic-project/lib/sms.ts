@@ -1,67 +1,26 @@
 // lib/sms.ts
 import axios from 'axios';
 
-const KAVENEGAR_API_KEY = process.env.KAVENEGAR_API_KEY;
-const BASE_URL = 'https://api.kavenegar.com/v1';
+// ============================================================
+// متغیرهای محیطی (مستقیماً از process.env)
+// ============================================================
+const SMSIR_API_KEY = process.env.SMSIR_API_KEY;
+const SMSIR_LINE_NUMBER = process.env.SMSIR_LINE_NUMBER;
 
 // ============================================================
-// ۱. نرمالایز کردن شماره موبایل (پشتیبانی از ۰۹۰، ۰۹۱، ...)
+// نرمالایز شماره
 // ============================================================
 function normalizePhone(phone: string): string {
-
-    if (!phone) {
-        throw new Error("شماره موبایل وارد نشده است.");
-    }
-
-    // تبدیل اعداد فارسی و عربی به انگلیسی
-    const toEnglish = (value: string) =>
-        value
-            .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
-            .replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
-
-    let cleaned = toEnglish(phone);
-
-    cleaned = cleaned
-        .replace(/\s/g, "")
-        .replace(/-/g, "")
-        .replace(/\(/g, "")
-        .replace(/\)/g, "");
-
-    if (cleaned.startsWith("+98")) {
-        cleaned = "0" + cleaned.substring(3);
-    }
-
-    if (cleaned.startsWith("0098")) {
-        cleaned = "0" + cleaned.substring(4);
-    }
-
-    if (cleaned.startsWith("98")) {
-        cleaned = "0" + cleaned.substring(2);
-    }
-
-    if (!/^09\d{9}$/.test(cleaned)) {
-        throw new Error(`شماره موبایل نامعتبر است: ${phone}`);
-    }
-
-    return cleaned;
+  let cleaned = phone.replace(/[\s\-\(\)\+]/g, '');
+  if (cleaned.startsWith('98')) cleaned = '0' + cleaned.slice(2);
+  if (cleaned.startsWith('+98')) cleaned = '0' + cleaned.slice(3);
+  if (cleaned.startsWith('0098')) cleaned = '0' + cleaned.slice(4);
+  if (cleaned.length === 11 && cleaned.startsWith('0')) return cleaned;
+  throw new Error(`شماره موبایل نامعتبر است: ${phone}`);
 }
 
 // ============================================================
-// ۲. دریافت شماره فرستنده (Sender) از env
-// ============================================================
-function getSenderNumber(): string {
-  // شماره خط اختصاصی را از env بخوان، یا از یک مقدار پیش‌فرض استفاده کن
-  const sender = process.env.KAVENEGAR_SENDER;
-  if (sender) {
-    return sender;
-  }
-  // اگر تنظیم نشده، خطا نده و به کاوه‌نگار اجازه بده از خط پیش‌فرض استفاده کند
-  console.warn('⚠️ شماره فرستنده (KAVENEGAR_SENDER) در env تنظیم نشده است. کاوه‌نگار از خط پیش‌فرض استفاده خواهد کرد.');
-  return '';
-}
-
-// ============================================================
-// ۳. ارسال پیامک تأیید نوبت به بیمار
+// ارسال پیامک به بیمار
 // ============================================================
 export async function sendAppointmentSMS(
   phone: string,
@@ -69,9 +28,18 @@ export async function sendAppointmentSMS(
   day: string,
   time: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  if (!KAVENEGAR_API_KEY) {
-    console.error('❌ کلید API کاوه‌نگار تنظیم نشده است');
+  // خواندن متغیرها در زمان اجرا
+  const apiKey = process.env.SMSIR_API_KEY;
+  const lineNumber = process.env.SMSIR_LINE_NUMBER;
+
+  if (!apiKey) {
+    console.error('❌ SMSIR_API_KEY در محیط تنظیم نشده است');
     return { success: false, error: 'کلید API تنظیم نشده' };
+  }
+
+  if (!lineNumber) {
+    console.error('❌ SMSIR_LINE_NUMBER در محیط تنظیم نشده است');
+    return { success: false, error: 'شماره خط تنظیم نشده' };
   }
 
   let normalizedPhone: string;
@@ -82,44 +50,34 @@ export async function sendAppointmentSMS(
     return { success: false, error: error.message };
   }
 
-  const message = `سلام ${name} عزیز 
+  const message = `سلام ${name} عزیز 🌸
 
 نوبت شما در مطب تخصصی مامایی فرشته صادقی با موفقیت ثبت شد.
 
- روز: ${day}
- ساعت: ${time}
+📅 روز: ${day}
+🕐 ساعت: ${time}
 
-آدرس: خمینی‌شهر، خیابان بوعلی، روبروی بانک مسکن
-تلفن: ۰۳۱۳۲۶۷۱۰۵۵
-
-🔹 لطفاً ۱۵ دقیقه زودتر حضور داشته باشید.
-🔹 همراه داشتن کارت ملی و بیمه الزامی است.
+📍 آدرس: خمینی‌شهر، خیابان بوعلی، روبروی بانک مسکن
+📞 تلفن: ۰۳۱۳۲۶۷۱۰۵۵
 
 با احترام،
-مطب خانم فرشته صادقی
-کارشناس مامایی`;
+مطب خانم فرشته صادقی`;
 
   try {
-    // ساخت payload
-const payload = new URLSearchParams();
-
-payload.append("receptor", normalizedPhone);
-payload.append("message", message);
-
-const sender = getSenderNumber();
-
-if(sender){
-    payload.append("sender", sender);
-}
-
-    // این بخش دیگر لازم نیست، زیرا قبلاً شماره فرستنده به payload اضافه شده است
+    console.log(`📤 ارسال پیامک به ${normalizedPhone}...`);
 
     const response = await axios.post(
-      `${BASE_URL}/${KAVENEGAR_API_KEY}/sms/send.json`,
-      payload,
+      'https://api.sms.ir/v1/send/bulk',
+      {
+        lineNumber: lineNumber,
+        messageText: message,
+        mobiles: [normalizedPhone],
+        sendDateTime: null,
+      },
       {
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-API-KEY': apiKey,
+          'Content-Type': 'application/json',
         },
         timeout: 10000,
       }
@@ -127,47 +85,21 @@ if(sender){
 
     const result = response.data;
 
-    if (result.return?.status === 200) {
-      const messageId = result.entries?.[0]?.messageid;
-      console.log(`✅ پیامک بیمار ارسال شد. ID: ${messageId} | گیرنده: ${normalizedPhone}`);
-      return { success: true, messageId };
+    if (result.status === 1) {
+      console.log(`✅ پیامک ارسال شد. گیرنده: ${normalizedPhone}`);
+      return { success: true };
     } else {
-      const errorMsg = result.return?.message || 'خطای ناشناخته';
-      console.error(`❌ خطا در ارسال پیامک بیمار: ${errorMsg}`);
-      return { success: false, error: errorMsg };
+      console.error(`❌ خطا: ${result.message}`);
+      return { success: false, error: result.message || 'خطا در ارسال پیامک' };
     }
   } catch (error: any) {
-    console.error('❌ خطا در ارسال پیامک بیمار:');
-
-    if (error.response) {
-      const status = error.response.status;
-      const data = error.response.data;
-
-      if (status === 412) {
-        return {
-          success: false,
-          error: 'شماره موبایل نامعتبر است. لطفاً شماره را با ۰ شروع کنید و ۱۱ رقم وارد نمایید.',
-        };
-      } else if (status === 403) {
-        return { success: false, error: 'کلید API نامعتبر یا حساب محدود شده است.' };
-      } else if (status === 429) {
-        return { success: false, error: 'تعداد درخواست‌ها بیش از حد مجاز است. چند دقیقه بعد تلاش کنید.' };
-      } else {
-        return {
-          success: false,
-          error: data?.return?.message || `خطا با کد ${status}`,
-        };
-      }
-    } else if (error.request) {
-      return { success: false, error: 'عدم دریافت پاسخ از سرور کاوه‌نگار' };
-    } else {
-      return { success: false, error: error.message || 'خطای ناشناخته' };
-    }
+    console.error('❌ خطا در ارسال پیامک:', error.response?.data || error.message);
+    return { success: false, error: error.response?.data?.message || error.message };
   }
 }
 
 // ============================================================
-// ۴. ارسال پیامک به ادمین (با شماره فرستنده)
+// ارسال پیامک به ادمین
 // ============================================================
 export async function sendAdminNotification(
   name: string,
@@ -175,11 +107,18 @@ export async function sendAdminNotification(
   day: string,
   time: string
 ): Promise<{ success: boolean; error?: string }> {
+  const apiKey = process.env.SMSIR_API_KEY;
+  const lineNumber = process.env.SMSIR_LINE_NUMBER;
   const adminPhone = process.env.ADMIN_PHONE || '09123456789';
 
-  if (!KAVENEGAR_API_KEY) {
-    console.error('❌ کلید API کاوه‌نگار تنظیم نشده است');
+  if (!apiKey) {
+    console.error('❌ کلید API SMS.ir تنظیم نشده است');
     return { success: false, error: 'کلید API تنظیم نشده' };
+  }
+
+  if (!lineNumber) {
+    console.error('❌ شماره خط SMS.ir تنظیم نشده است');
+    return { success: false, error: 'شماره خط تنظیم نشده' };
   }
 
   let normalizedAdminPhone: string;
@@ -190,69 +129,95 @@ export async function sendAdminNotification(
     return { success: false, error: 'شماره ادمین نامعتبر است' };
   }
 
-  const message = ` نوبت جدید در مطب فرشته صادقی ثبت شد!
+  const message = `📋 نوبت جدید در مطب فرشته صادقی ثبت شد!
 
-نام بیمار: ${name}
- شماره موبایل: ${phone}
- روز نوبت: ${day}
-ساعت نوبت: ${time}
+👤 نام بیمار: ${name}
+📱 شماره موبایل: ${phone}
+📅 روز نوبت: ${day}
+🕐 ساعت نوبت: ${time}
 
-🔹 برای مدیریت نوبت به پنل ادمین مراجعه کنید.
-🔹 لینک پنل: http://localhost:3000/dashboard/admin`;
+🔹 برای مدیریت نوبت به پنل ادمین مراجعه کنید.`;
 
   try {
-    const payload: any = {
-      receptor: normalizedAdminPhone,
-      message: message,
-    };
-
-    // شماره فرستنده را حتماً تنظیم کن (برای ادمین الزامی است)
-    const sender = getSenderNumber();
-    if (sender) {
-      payload.sender = sender;
-    } else {
-      // اگر شماره فرستنده تنظیم نشده، از یک شماره پیش‌فرض استفاده کن
-      // این شماره را از پنل کاوه‌نگار > بخش "خطوط من" پیدا کن
-      payload.sender = '1000596446'; // شماره خط اختصاصی خود را اینجا بگذار
-      console.warn('⚠️ از شماره فرستنده پیش‌فرض استفاده شد. برای تغییر، KAVENEGAR_SENDER را در env تنظیم کنید.');
-    }
-
     const response = await axios.post(
-      `${BASE_URL}/${KAVENEGAR_API_KEY}/sms/send.json`,
-      payload,
+      'https://api.sms.ir/v1/send/bulk',
+      {
+        lineNumber: lineNumber,
+        messageText: message,
+        mobiles: [normalizedAdminPhone],
+        sendDateTime: null,
+      },
       {
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-API-KEY': apiKey,
+          'Content-Type': 'application/json',
         },
         timeout: 10000,
       }
     );
 
     const result = response.data;
-    if (result.return?.status === 200) {
+    if (result.status === 1) {
       console.log(`✅ پیامک ادمین ارسال شد. گیرنده: ${normalizedAdminPhone}`);
       return { success: true };
     } else {
-      console.error('❌ خطا در ارسال پیامک ادمین:', result.return?.message);
-      return { success: false, error: result.return?.message || 'خطا در ارسال پیامک ادمین' };
+      console.error('❌ خطا در ارسال پیامک ادمین:', result.message);
+      return { success: false, error: result.message || 'خطا در ارسال پیامک ادمین' };
     }
   } catch (error: any) {
-    console.error('❌ خطا در ارسال پیامک ادمین:');
+    console.error('❌ خطا در ارسال پیامک ادمین:', error.response?.data || error.message);
+    return { success: false, error: error.response?.data?.message || error.message };
+  }
+}
 
-    if (error.response) {
-      const status = error.response.status;
-      const data = error.response.data;
+// ============================================================
+// تابع تست
+// ============================================================
+export async function testSMS(phone: string): Promise<{ success: boolean; error?: string }> {
+  const apiKey = process.env.SMSIR_API_KEY;
+  const lineNumber = process.env.SMSIR_LINE_NUMBER;
 
-      if (status === 412) {
-        return {
-          success: false,
-          error: 'شماره فرستنده (Sender) در کاوه‌نگار معتبر نیست. لطفاً شماره خط اختصاصی را در تنظیمات پنل کاوه‌نگار بررسی کنید.',
-        };
-      } else {
-        return { success: false, error: data?.return?.message || `خطا با کد ${status}` };
+  if (!apiKey) {
+    return { success: false, error: 'کلید API تنظیم نشده' };
+  }
+
+  if (!lineNumber) {
+    return { success: false, error: 'شماره خط تنظیم نشده' };
+  }
+
+  let normalizedPhone: string;
+  try {
+    normalizedPhone = normalizePhone(phone);
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+
+  try {
+    const response = await axios.post(
+      'https://api.sms.ir/v1/send/bulk',
+      {
+        lineNumber: lineNumber,
+        messageText: '✅ این یک پیامک تست از مطب مامایی فرشته صادقی است.',
+        mobiles: [normalizedPhone],
+        sendDateTime: null,
+      },
+      {
+        headers: {
+          'X-API-KEY': apiKey,
+          'Content-Type': 'application/json',
+        },
+        timeout: 10000,
       }
-    }
+    );
 
-    return { success: false, error: error.message || 'خطا در ارسال پیامک ادمین' };
+    if (response.data.status === 1) {
+      console.log(`✅ پیامک تست به ${normalizedPhone} ارسال شد`);
+      return { success: true };
+    } else {
+      return { success: false, error: response.data.message || 'خطا در ارسال پیامک تست' };
+    }
+  } catch (error: any) {
+    console.error('❌ خطا در ارسال پیامک تست:', error.response?.data || error.message);
+    return { success: false, error: error.message || 'خطا در ارسال پیامک تست' };
   }
 }

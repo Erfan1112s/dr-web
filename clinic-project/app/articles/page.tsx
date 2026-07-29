@@ -1,21 +1,46 @@
 // app/articles/page.tsx
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { Calendar, Eye, Search } from 'lucide-react';
+import Image from 'next/image';
+import { Calendar, Eye, Clock, Search, Tag, ArrowLeft } from 'lucide-react';
 
+// ============================================================
+// تابع محاسبه زمان مطالعه
+// ============================================================
+function getReadingTime(content: string): string {
+  const wordsPerMinute = 200;
+  const words = content.replace(/<[^>]*>/g, '').split(/\s+/).length;
+  const minutes = Math.ceil(words / wordsPerMinute);
+  return minutes > 1 ? `${minutes} دقیقه` : '۱ دقیقه';
+}
+
+// ============================================================
+// کامپوننت اصلی
+// ============================================================
 export default async function ArticlesPage({
   searchParams,
 }: {
-  searchParams: { category?: string; page?: string };
+  searchParams: { category?: string; page?: string; search?: string };
 }) {
   const category = searchParams.category || '';
   const page = parseInt(searchParams.page || '1');
-  const limit = 9;
+  const search = searchParams.search || '';
+  const limit = 6;
   const skip = (page - 1) * limit;
 
-  const where = category ? { category } : {};
+  // شرط‌های جستجو
+  const where: any = {};
+  if (category) where.category = category;
+  if (search) {
+    where.OR = [
+      { title: { contains: search, mode: 'insensitive' } },
+      { summary: { contains: search, mode: 'insensitive' } },
+      { content: { contains: search, mode: 'insensitive' } },
+    ];
+  }
 
-  const [articles, total] = await Promise.all([
+  // دریافت داده‌ها
+  const [articles, total, categories, popularArticles] = await Promise.all([
     prisma.article.findMany({
       where,
       orderBy: { publishedAt: 'desc' },
@@ -30,134 +55,311 @@ export default async function ArticlesPage({
         category: true,
         views: true,
         publishedAt: true,
+        content: true,
+        author: true,
+        tags: true,
       },
     }),
     prisma.article.count({ where }),
+    prisma.article.findMany({
+      select: { category: true },
+      distinct: ['category'],
+    }),
+    prisma.article.findMany({
+      orderBy: { views: 'desc' },
+      take: 5,
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        image: true,
+        views: true,
+      },
+    }),
   ]);
-
-  const categories = await prisma.article.findMany({
-    select: { category: true },
-    distinct: ['category'],
-  });
 
   const totalPages = Math.ceil(total / limit);
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg-light)] py-16">
-      <div className="container max-w-6xl mx-auto px-4">
-        {/* هدر */}
-        <div className="text-center mb-12">
-          <div className="inline-block bg-[var(--color-primary-lighter)] text-[var(--color-primary)] px-6 py-2 rounded-full text-sm mb-4 font-medium">
+    <div className="min-h-screen bg-[var(--color-bg-light)]">
+      {/* ===== هدر با گرادینت ===== */}
+      <div className="relative bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-light)] text-white py-16 md:py-24 overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-10 right-10 w-72 h-72 bg-white rounded-full blur-3xl" />
+          <div className="absolute bottom-10 left-10 w-96 h-96 bg-white rounded-full blur-3xl" />
+        </div>
+        <div className="container max-w-6xl mx-auto px-4 text-center relative z-10">
+          <div className="inline-block bg-white/20 backdrop-blur-sm text-white px-6 py-2 rounded-full text-sm mb-4 font-medium">
             مجله سلامت
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold mb-4 text-[var(--color-text-dark)]">
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-4">
             مقالات آموزشی
           </h1>
-          <p className="text-[var(--color-text-light)] max-w-2xl mx-auto text-lg">
+          <p className="text-xl text-white/90 max-w-2xl mx-auto leading-relaxed">
             مطالب مفید و علمی در زمینه مامایی، بارداری، سلامت زنان و مراقبت‌های پس از زایمان
           </p>
-        </div>
 
-        {/* فیلتر دسته‌بندی */}
-        <div className="flex flex-wrap items-center justify-center gap-2 mb-10">
-          <Link
-            href="/articles"
-            className={`px-5 py-2 rounded-full text-sm font-medium transition ${
-              !category
-                ? 'bg-[var(--color-primary)] text-white'
-                : 'bg-white text-[var(--color-text-dark)] hover:bg-gray-100 border border-gray-200'
-            }`}
-          >
-            همه
-          </Link>
-          {categories.map(({ category: cat }) => (
-            <Link
-              key={cat}
-              href={`/articles?category=${encodeURIComponent(cat)}`}
-              className={`px-5 py-2 rounded-full text-sm font-medium transition ${
-                category === cat
-                  ? 'bg-[var(--color-primary)] text-white'
-                  : 'bg-white text-[var(--color-text-dark)] hover:bg-gray-100 border border-gray-200'
-              }`}
-            >
-              {cat}
-            </Link>
-          ))}
-        </div>
-
-        {/* لیست مقالات */}
-        {articles.length === 0 ? (
-          <div className="text-center py-20 text-[var(--color-text-light)]">
-            <div className="text-6xl mb-4">📝</div>
-            <p>هیچ مقاله‌ای در این دسته‌بندی یافت نشد</p>
-          </div>
-        ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {articles.map((article) => (
-              <Link
-                key={article.id}
-                href={`/articles/${article.slug}`}
-                className="group bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 hover:-translate-y-2"
+          {/* ===== جستجو ===== */}
+          <div className="mt-8 max-w-xl mx-auto">
+            <form method="GET" className="relative">
+              <input
+                type="text"
+                name="search"
+                defaultValue={search}
+                placeholder="جستجو در مقالات..."
+                className="w-full px-6 py-4 pr-14 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 text-white placeholder:text-white/70 focus:outline-none focus:ring-2 focus:ring-white/50 transition"
+              />
+              <button
+                type="submit"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 hover:text-white transition"
               >
-                <div className="aspect-[16/10] bg-[var(--color-primary-lighter)] flex items-center justify-center text-6xl">
-                  {article.image ? (
-                    <img
-                      src={article.image}
-                      alt={article.title}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    '📄'
-                  )}
-                </div>
-                <div className="p-6">
-                  <div className="flex items-center gap-3 text-sm text-[var(--color-text-light)] mb-3">
-                    <span className="inline-block px-3 py-1 bg-[var(--color-primary-lighter)] text-[var(--color-primary)] rounded-full text-xs">
-                      {article.category}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Calendar size={14} />
-                      {new Date(article.publishedAt).toLocaleDateString('fa-IR')}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Eye size={14} />
-                      {article.views}
-                    </span>
-                  </div>
-                  <h3 className="text-xl font-bold mb-2 group-hover:text-[var(--color-primary)] transition-colors line-clamp-2">
-                    {article.title}
-                  </h3>
-                  <p className="text-[var(--color-text-light)] text-sm line-clamp-2">
-                    {article.summary}
-                  </p>
-                  <div className="mt-4 text-[var(--color-primary)] font-medium group-hover:underline transition-all inline-flex items-center gap-1">
-                    ادامه مطلب
-                    <span className="group-hover:translate-x-1 transition-transform">←</span>
-                  </div>
-                </div>
-              </Link>
-            ))}
+                <Search size={22} />
+              </button>
+            </form>
           </div>
-        )}
+        </div>
+      </div>
 
-        {/* صفحه‌بندی */}
-        {totalPages > 1 && (
-          <div className="flex justify-center gap-2 mt-12">
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+      {/* ===== محتوای اصلی ===== */}
+      <div className="container max-w-6xl mx-auto px-4 py-12">
+        <div className="flex flex-col lg:flex-row gap-12">
+          {/* ===== ستون اصلی ===== */}
+          <div className="flex-1">
+            {/* فیلتر دسته‌بندی */}
+            <div className="flex flex-wrap items-center gap-2 mb-8">
               <Link
-                key={p}
-                href={`/articles?page=${p}${category ? `&category=${encodeURIComponent(category)}` : ''}`}
-                className={`px-4 py-2 rounded-lg transition ${
-                  p === page
+                href="/articles"
+                className={`px-4 py-2 rounded-full text-sm font-medium transition ${
+                  !category
                     ? 'bg-[var(--color-primary)] text-white'
                     : 'bg-white text-[var(--color-text-dark)] hover:bg-gray-100 border border-gray-200'
                 }`}
               >
-                {p}
+                همه
               </Link>
-            ))}
+              {categories.map(({ category: cat }) => (
+                <Link
+                  key={cat}
+                  href={`/articles?category=${encodeURIComponent(cat)}${search ? `&search=${encodeURIComponent(search)}` : ''}`}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition ${
+                    category === cat
+                      ? 'bg-[var(--color-primary)] text-white'
+                      : 'bg-white text-[var(--color-text-dark)] hover:bg-gray-100 border border-gray-200'
+                  }`}
+                >
+                  {cat}
+                </Link>
+              ))}
+            </div>
+
+            {/* لیست مقالات */}
+            {articles.length === 0 ? (
+              <div className="bg-white rounded-3xl shadow-sm p-12 text-center">
+                <div className="text-6xl mb-4">🔍</div>
+                <h3 className="text-2xl font-bold mb-2 text-[var(--color-text-dark)]">نتیجه‌ای یافت نشد</h3>
+                <p className="text-[var(--color-text-light)]">
+                  با عبارت "{search}" مقاله‌ای پیدا نشد. لطفاً عبارت دیگری را جستجو کنید.
+                </p>
+                <Link
+                  href="/articles"
+                  className="inline-block mt-6 text-[var(--color-primary)] hover:underline"
+                >
+                  ← مشاهده همه مقالات
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {articles.map((article) => (
+                  <article
+                    key={article.id}
+                    className="group bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-500 border border-gray-100"
+                  >
+                    <div className="grid md:grid-cols-3 gap-0">
+                      {/* تصویر */}
+                      <div className="relative h-56 md:h-full min-h-[200px] bg-gray-100 overflow-hidden">
+                        {article.image ? (
+                          <Image
+                            src={article.image}
+                            alt={article.title}
+                            fill
+                            className="object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-[var(--color-primary-lighter)] flex items-center justify-center text-6xl">
+                            📄
+                          </div>
+                        )}
+                        <div className="absolute top-4 right-4">
+                          <span className="inline-block px-3 py-1 bg-white/90 backdrop-blur-sm text-[var(--color-primary)] rounded-full text-xs font-medium shadow-sm">
+                            {article.category}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* محتوا */}
+                      <div className="md:col-span-2 p-6 md:p-8 flex flex-col justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--color-text-light)] mb-3">
+                            <span className="flex items-center gap-1">
+                              <Calendar size={14} />
+                              {new Date(article.publishedAt).toLocaleDateString('fa-IR')}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Clock size={14} />
+                              {getReadingTime(article.content)}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Eye size={14} />
+                              {article.views} بازدید
+                            </span>
+                          </div>
+
+                          <Link href={`/articles/${article.slug}`}>
+                            <h2 className="text-2xl md:text-3xl font-bold mb-3 text-[var(--color-text-dark)] group-hover:text-[var(--color-primary)] transition-colors line-clamp-2">
+                              {article.title}
+                            </h2>
+                          </Link>
+
+                          <p className="text-[var(--color-text-light)] leading-relaxed line-clamp-2">
+                            {article.summary}
+                          </p>
+                        </div>
+
+                        <div className="mt-6 flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-gray-100">
+                          <div className="flex items-center gap-3 text-sm text-[var(--color-text-light)]">
+                            <span className="font-medium text-[var(--color-text-dark)]">
+                              {article.author}
+                            </span>
+                          </div>
+                          <Link
+                            href={`/articles/${article.slug}`}
+                            className="inline-flex items-center gap-2 text-[var(--color-primary)] font-medium hover:gap-3 transition-all"
+                          >
+                            ادامه مطلب
+                            <ArrowLeft size={16} className="group-hover:translate-x-1 transition-transform" />
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+
+            {/* صفحه‌بندی */}
+            {totalPages > 1 && (
+              <div className="flex justify-center gap-2 mt-12">
+                {Array.from({ length: Math.min(totalPages, 10) }, (_, i) => i + 1).map((p) => {
+                  const params = new URLSearchParams();
+                  if (category) params.set('category', category);
+                  if (search) params.set('search', search);
+                  params.set('page', String(p));
+
+                  return (
+                    <Link
+                      key={p}
+                      href={`/articles?${params.toString()}`}
+                      className={`px-4 py-2 rounded-lg transition ${
+                        p === page
+                          ? 'bg-[var(--color-primary)] text-white'
+                          : 'bg-white text-[var(--color-text-dark)] hover:bg-gray-100 border border-gray-200'
+                      }`}
+                    >
+                      {p}
+                    </Link>
+                  );
+                })}
+                {totalPages > 10 && page < totalPages && (
+                  <Link
+                    href={`/articles?${new URLSearchParams({
+                      ...(category && { category }),
+                      ...(search && { search }),
+                      page: String(page + 1),
+                    }).toString()}`}
+                    className="px-4 py-2 rounded-lg bg-white text-[var(--color-text-dark)] hover:bg-gray-100 border border-gray-200 transition"
+                  >
+                    بعدی
+                  </Link>
+                )}
+              </div>
+            )}
           </div>
-        )}
+
+          {/* ===== سایدبار ===== */}
+          <div className="lg:w-80 flex-shrink-0 space-y-8">
+            {/* مقالات محبوب */}
+            <div className="bg-white rounded-3xl shadow-sm p-6 border border-gray-100">
+              <h3 className="text-xl font-bold mb-4 text-[var(--color-text-dark)] flex items-center gap-2">
+                🔥 محبوب‌ترین‌ها
+              </h3>
+              {popularArticles.length === 0 ? (
+                <p className="text-[var(--color-text-light)] text-sm">هنوز مقاله‌ای وجود ندارد</p>
+              ) : (
+                <div className="space-y-4">
+                  {popularArticles.map((article) => (
+                    <Link
+                      key={article.id}
+                      href={`/articles/${article.slug}`}
+                      className="flex items-center gap-3 group hover:bg-[var(--color-primary-bg)] p-2 rounded-xl transition"
+                    >
+                      <div className="relative w-16 h-16 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0">
+                        {article.image ? (
+                          <Image
+                            src={article.image}
+                            alt={article.title}
+                            fill
+                            className="object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-[var(--color-primary-lighter)] flex items-center justify-center text-2xl">
+                            📄
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-sm font-semibold text-[var(--color-text-dark)] group-hover:text-[var(--color-primary)] transition line-clamp-2">
+                          {article.title}
+                        </h4>
+                        <div className="text-xs text-[var(--color-text-light)] flex items-center gap-1 mt-1">
+                          <Eye size={12} />
+                          {article.views} بازدید
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* دسته‌بندی‌ها */}
+            <div className="bg-white rounded-3xl shadow-sm p-6 border border-gray-100">
+              <h3 className="text-xl font-bold mb-4 text-[var(--color-text-dark)] flex items-center gap-2">
+                <Tag size={20} className="text-[var(--color-primary)]" />
+                دسته‌بندی‌ها
+              </h3>
+              {categories.length === 0 ? (
+                <p className="text-[var(--color-text-light)] text-sm">دسته‌بندی وجود ندارد</p>
+              ) : (
+                <div className="space-y-2">
+                  {categories.map(({ category: cat }) => (
+                    <Link
+                      key={cat}
+                      href={`/articles?category=${encodeURIComponent(cat)}`}
+                      className="flex items-center justify-between px-4 py-2 bg-[var(--color-bg-light)] rounded-xl hover:bg-[var(--color-primary-lighter)] transition group"
+                    >
+                      <span className="text-[var(--color-text-dark)] group-hover:text-[var(--color-primary)] transition">
+                        {cat}
+                      </span>
+                      <span className="text-xs text-[var(--color-text-light)] group-hover:text-[var(--color-primary)] transition">
+                        →
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -40,15 +40,16 @@ model Appointment {
   @@map("appointments")
 }
 model ChatMessage {
-  id        Int      @id @default(autoincrement())
-  sessionId String   @map("session_id")
-  userId    Int?     @map("user_id")
-  userMsg   String   @map("user_message")
-  botMsg    String   @map("bot_message")
-  isRead    Boolean  @default(false) @map("is_read")
-  createdAt DateTime @default(now()) @map("created_at")
+  id          Int      @id @default(autoincrement())
+  sessionId   String   @map("session_id")
+  userId      Int?     @map("user_id")
+  userMsg     String   @map("user_message")
+  botMsg      String   @map("bot_message")
+  adminReply  String?  @map("admin_reply") // ← اضافه شد: پاسخ ادمین
+  isRead      Boolean  @default(false) @map("is_read")
+  createdAt   DateTime @default(now()) @map("created_at")
 
-  user      User?    @relation(fields: [userId], references: [id])
+  user        User?    @relation(fields: [userId], references: [id])
 
   @@map("chat_messages")
 }

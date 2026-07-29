@@ -1,34 +1,80 @@
 // app/api/chat/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import OpenAI from 'openai';
 import { prisma } from '@/lib/prisma';
 
-const faq: Record<string, string> = {
-  'ساعت کاری': 'مطب روزهای یکشنبه و سه‌شنبه از ساعت ۴:۳۰ تا ۸:۳۰ شب پذیرش دارد.',
-  'آدرس': 'خمینی‌شهر — خیابان بوعلی، روبروی بانک مسکن، جنب عینک چشم روشن',
-  'تلفن': '۰۳۱۳۲۶۷۱۰۵۵',
-  'ویزیت': 'ویزیت رایگان است.',
-  'بیمه': 'نسخه و آزمایشات تحت پوشش بیمه هستند.',
-  'خدمات': 'مراقبت بارداری، بیماری‌های زنان، IUD، پاپ اسمیر، مشاوره قبل و بعد زایمان',
-  'نوبت': 'برای نوبت‌دهی لطفاً روی دکمه سبز رنگ در صفحه کلیک کنید یا با شماره تماس بگیرید.',
-  'دکتر': 'فرشته صادقی، کارشناس مامایی با شماره نظام پزشکی ۳۲۳۲۴',
-};
+// ============================================================
+// راه‌اندازی کلاینت OpenRouter
+// ============================================================
+const openrouter = new OpenAI({
+  apiKey: process.env.OPENROUTER_API_KEY,
+  baseURL: 'https://openrouter.ai/api/v1', // آدرس OpenRouter
+});
+
+// پرامپت سیستم (مشخصات مطب)
+const SYSTEM_PROMPT = `تو یک دستیار هوشمند برای مطب تخصصی مامایی خانم فرشته صادقی هستی.
+اطلاعات مطب:
+- نام: فرشته صادقی
+- تخصص: کارشناس مامایی
+- شماره نظام پزشکی: ۳۲۳۲۴
+- تلفن: ۰۳۱۳۲۶۷۱۰۵۵
+- آدرس: خمینی‌شهر، خیابان بوعلی، روبروی بانک مسکن، جنب عینک چشم روشن
+- ساعات کاری: یکشنبه و سه‌شنبه، ساعت ۴:۳۰ تا ۸:۳۰ شب
+- ویزیت: رایگان
+- بیمه: نسخه و آزمایشات تحت پوشش بیمه هستند
+- خدمات: مراقبت بارداری، بیماری‌های زنان، IUD، پاپ اسمیر، مشاوره قبل و بعد زایمان
+- نوبت‌دهی: ۱ تا ۲ روز جلوتر، نوبت اورژانسی دارد
+
+تو باید با لحنی گرم، حرفه‌ای و زنانه پاسخ بدی.
+اگر سوالی خارج از حیطه مامایی بود، با مهربانی بگو که در این زمینه تخصص ندارم.`;
 
 export async function POST(req: NextRequest) {
   try {
-    const { message, sessionId, userId } = await req.json();
-    const userMsg = message.trim().toLowerCase();
+    const { message, sessionId, userId, history } = await req.json();
 
-    // پیدا کردن پاسخ
-    let reply = 'سوال شما در پایگاه داده یافت نشد. لطفاً با مطب تماس بگیرید یا سوال خود را دقیق‌تر بپرسید.';
-    for (const [key, value] of Object.entries(faq)) {
-      if (userMsg.includes(key)) {
-        reply = value;
-        break;
-      }
+    if (!message) {
+      return NextResponse.json(
+        { error: 'پیام را وارد کنید' },
+        { status: 400 }
+      );
     }
 
-    // ذخیره پیام‌ها در دیتابیس
-    const chatMessage = await prisma.chatMessage.create({
+    // ساخت تاریخچه پیام‌ها برای OpenRouter
+    const messages = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...(history || []).map((msg: any) => ({
+        role: msg.role === 'user' ? 'user' : 'assistant',
+        content: msg.content,
+      })),
+      { role: 'user', content: message },
+    ];
+
+    // ============================================================
+    // انتخاب مدل مناسب
+    // ============================================================
+    // می‌تونی از هر مدلی که OpenRouter پشتیبانی می‌کنه استفاده کنی.
+    // چند نمونه:
+    // - 'openai/gpt-4o' (قوی‌ترین)
+    // - 'openai/gpt-3.5-turbo' (سریع و کم‌هزینه)
+    // - 'anthropic/claude-3.5-sonnet' (کلود)
+    // - 'google/gemini-2.5-flash' (جمینی)
+    // - 'meta-llama/llama-4' (متا)
+    // - 'openrouter/free' (مدل‌های رایگان - سهمیه محدود)
+    // ============================================================
+    const model = process.env.OPENROUTER_MODEL || 'openai/gpt-3.5-turbo';
+
+    const completion = await openrouter.chat.completions.create({
+      model: model,
+      messages: messages,
+      temperature: 0.7,
+      max_tokens: 500,
+    });
+
+    const reply = completion.choices[0]?.message?.content ||
+      'متاسفانه نتوانستم پاسخ را پیدا کنم. لطفاً دوباره تلاش کنید.';
+
+    // ذخیره در دیتابیس
+    await prisma.chatMessage.create({
       data: {
         sessionId: sessionId || 'guest-session',
         userId: userId ? parseInt(userId) : null,
@@ -38,12 +84,20 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      reply,
-      messageId: chatMessage.id,
-    });
+    return NextResponse.json({ reply });
+
   } catch (error) {
     console.error('❌ Error in chat API:', error);
-    return NextResponse.json({ error: 'خطای داخلی سرور' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'خطا در ارتباط با سرور هوش مصنوعی' },
+      { status: 500 }
+    );
   }
 }
+
+let finalReply = reply;
+if (existingMessage?.adminReply) {
+  finalReply = existingMessage.adminReply;
+}
+
+return NextResponse.json({ reply: finalReply });

@@ -7,6 +7,7 @@ import ArticlesPreview from './components/ui/ArticlesPreview';
 import Testimonials from './components/ui/Testimonials';
 import Contact from './components/ui/contect';
 import Footer from './components/ui/footer';
+import About from './components/ui/About';
 
 export default function Home() {
   return (
@@ -16,11 +17,12 @@ export default function Home() {
         <Hero />
         <Stats />
         <Services />
+        <About></About>
         <ArticlesPreview />
         <Testimonials />
         <Contact />
       </main>
-      <Footer />
+      
     </>
   );
 }

@@ -1,16 +1,17 @@
 // app/articles/[slug]/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState, useRef } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import {
   Calendar,
   User,
   Eye,
   Tag,
-  ArrowRight,
+  ArrowLeft,
   FileText,
   Download,
   MessageCircle,
@@ -19,6 +20,9 @@ import {
   CheckCircle,
   AlertCircle,
   Clock,
+  Share2,
+  Bookmark,
+  Heart,
 } from 'lucide-react';
 
 // ============================================================
@@ -32,9 +36,7 @@ type Comment = {
   createdAt: string;
   isApproved: boolean;
   adminReply?: string;
-  user?: {
-    name: string;
-  };
+  user?: { name: string };
 };
 
 type Article = {
@@ -56,16 +58,27 @@ type Article = {
 };
 
 // ============================================================
+// تابع محاسبه زمان مطالعه
+// ============================================================
+function getReadingTime(content: string): string {
+  const wordsPerMinute = 200;
+  const words = content.replace(/<[^>]*>/g, '').split(/\s+/).length;
+  const minutes = Math.ceil(words / wordsPerMinute);
+  return minutes > 1 ? `${minutes} دقیقه` : '۱ دقیقه';
+}
+
+// ============================================================
 // کامپوننت اصلی
 // ============================================================
 export default function ArticlePage() {
   const { slug } = useParams();
-  const router = useRouter();
   const { data: session } = useSession();
 
   const [article, setArticle] = useState<Article | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [readingProgress, setReadingProgress] = useState(0);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // State‌های فرم نظر
   const [commentAuthor, setCommentAuthor] = useState('');
@@ -88,12 +101,8 @@ export default function ArticlePage() {
     try {
       const res = await fetch(`/api/articles/slug/${slug}`);
       if (!res.ok) {
-        const text = await res.text();
-        if (res.status === 404) {
-          setError('مقاله مورد نظر یافت نشد');
-        } else {
-          setError('خطا در دریافت مقاله');
-        }
+        if (res.status === 404) setError('مقاله مورد نظر یافت نشد');
+        else setError('خطا در دریافت مقاله');
         return;
       }
       const data = await res.json();
@@ -107,6 +116,23 @@ export default function ArticlePage() {
   };
 
   // ============================================================
+  // پیشرفت خواندن
+  // ============================================================
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!contentRef.current) return;
+      const rect = contentRef.current.getBoundingClientRect();
+      const totalHeight = rect.height;
+      const scrolled = window.scrollY - rect.top + window.innerHeight;
+      const progress = Math.min(Math.max((scrolled / totalHeight) * 100, 0), 100);
+      setReadingProgress(progress);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [loading]);
+
+  // ============================================================
   // ثبت نظر
   // ============================================================
   const handleCommentSubmit = async (e: React.FormEvent) => {
@@ -115,11 +141,10 @@ export default function ArticlePage() {
       setCommentError('نام و متن نظر الزامی است');
       return;
     }
-
-     if (!article) {
-    setCommentError('مقاله یافت نشد');
-    return;
-  }
+    if (!article) {
+      setCommentError('مقاله یافت نشد');
+      return;
+    }
 
     setCommentLoading(true);
     setCommentError('');
@@ -130,7 +155,7 @@ export default function ArticlePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          articleId: article?.id,
+          articleId: article.id,
           author: commentAuthor,
           email: commentEmail || null,
           content: commentContent,
@@ -138,14 +163,17 @@ export default function ArticlePage() {
         }),
       });
 
-      const data = await res.json();
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
 
-      if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
         setCommentSuccess(true);
         setCommentAuthor('');
         setCommentEmail('');
         setCommentContent('');
-        // به‌روزرسانی لیست نظرات
         fetchArticle();
         setTimeout(() => setCommentSuccess(false), 5000);
       } else {
@@ -157,16 +185,6 @@ export default function ArticlePage() {
     } finally {
       setCommentLoading(false);
     }
-  };
-
-  // ============================================================
-  // محاسبه خواندن مقاله (تخمینی)
-  // ============================================================
-  const getReadingTime = (content: string) => {
-    const wordsPerMinute = 200;
-    const words = content.replace(/<[^>]*>/g, '').split(/\s+/).length;
-    const minutes = Math.ceil(words / wordsPerMinute);
-    return minutes > 1 ? `${minutes} دقیقه` : '۱ دقیقه';
   };
 
   // ============================================================
@@ -193,7 +211,7 @@ export default function ArticlePage() {
             href="/articles"
             className="inline-flex items-center gap-2 bg-[var(--color-primary)] text-white px-6 py-3 rounded-full hover:shadow-lg transition"
           >
-            <ArrowRight size={18} />
+            <ArrowLeft size={18} />
             بازگشت به لیست مقالات
           </Link>
         </div>
@@ -204,91 +222,106 @@ export default function ArticlePage() {
   const tags = article.tags ? article.tags.split(',').map((t) => t.trim()) : [];
   const readingTime = getReadingTime(article.content);
   const hasPdf = article.pdfUrl && article.pdfUrl.trim() !== '';
+  const approvedComments = article.comments.filter((c) => c.isApproved);
 
+  // ============================================================
+  // رندر اصلی
+  // ============================================================
   return (
-    <div className="min-h-screen bg-[var(--color-bg-light)] py-8 md:py-16">
-      <div className="container max-w-4xl mx-auto px-4">
-        {/* ============================================================
-            مسیر (Breadcrumb)
-            ============================================================ */}
-        <nav className="flex items-center gap-2 text-sm text-[var(--color-text-light)] mb-6 overflow-x-auto">
-          <Link href="/" className="hover:text-[var(--color-primary)] transition whitespace-nowrap">
-            خانه
-          </Link>
-          <span>/</span>
-          <Link href="/articles" className="hover:text-[var(--color-primary)] transition whitespace-nowrap">
-            مقالات
-          </Link>
-          <span>/</span>
-          <span className="text-[var(--color-text-dark)] truncate">{article.title}</span>
-        </nav>
+    <div className="min-h-screen bg-[var(--color-bg-light)]">
+      {/* ===== نوار پیشرفت خواندن ===== */}
+      <div className="fixed top-0 left-0 right-0 z-50 h-1 bg-gray-200">
+        <div
+          className="h-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary-light)] transition-all duration-200"
+          style={{ width: `${readingProgress}%` }}
+        />
+      </div>
 
-        {/* ============================================================
-            کارت مقاله
-            ============================================================ */}
+      {/* ===== هدر مقاله ===== */}
+      <div className="relative bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-light)] text-white py-12 md:py-16 overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-10 right-10 w-72 h-72 bg-white rounded-full blur-3xl" />
+          <div className="absolute bottom-10 left-10 w-96 h-96 bg-white rounded-full blur-3xl" />
+        </div>
+        <div className="container max-w-4xl mx-auto px-4 relative z-10">
+          {/* مسیر */}
+          <nav className="flex items-center gap-2 text-sm text-white/80 mb-4 overflow-x-auto">
+            <Link href="/" className="hover:text-white transition">خانه</Link>
+            <span>/</span>
+            <Link href="/articles" className="hover:text-white transition">مقالات</Link>
+            <span>/</span>
+            <span className="text-white truncate">{article.title}</span>
+          </nav>
+
+          {/* دسته‌بندی */}
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <span className="inline-block px-4 py-1.5 bg-white/20 backdrop-blur-sm text-white rounded-full text-sm font-medium">
+              {article.category}
+            </span>
+            {hasPdf && (
+              <span className="inline-flex items-center gap-1 px-4 py-1.5 bg-white/20 backdrop-blur-sm text-white rounded-full text-sm font-medium">
+                <FileText size={16} />
+                دارای PDF
+              </span>
+            )}
+          </div>
+
+          {/* عنوان */}
+          <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
+            {article.title}
+          </h1>
+
+          {/* متا اطلاعات */}
+          <div className="flex flex-wrap items-center gap-4 text-sm text-white/80 mt-4">
+            <span className="flex items-center gap-1.5">
+              <User size={16} />
+              {article.author}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Calendar size={16} />
+              {new Date(article.publishedAt).toLocaleDateString('fa-IR', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Clock size={16} />
+              {readingTime}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Eye size={16} />
+              {article.views} بازدید
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== محتوای اصلی ===== */}
+      <div className="container max-w-4xl mx-auto px-4 py-12">
         <article className="bg-white rounded-3xl shadow-lg overflow-hidden border border-gray-100">
           {/* تصویر شاخص */}
           {article.image && (
-            <div className="aspect-[16/9] bg-gray-100 overflow-hidden">
-              <img
+            <div className="relative aspect-[16/9] bg-gray-100 overflow-hidden">
+              <Image
                 src={article.image}
                 alt={article.title}
-                className="w-full h-full object-cover"
+                fill
+                className="object-cover"
+                priority
               />
             </div>
           )}
 
-          <div className="p-6 md:p-8 lg:p-10">
-            {/* ===== هدر مقاله ===== */}
-            <div className="mb-6">
-              {/* دسته‌بندی */}
-              <div className="flex flex-wrap items-center gap-3 mb-4">
-                <span className="inline-block px-4 py-1.5 bg-[var(--color-primary-lighter)] text-[var(--color-primary)] rounded-full text-sm font-medium">
-                  {article.category}
-                </span>
-                {hasPdf && (
-                  <span className="inline-flex items-center gap-1 px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full text-sm font-medium">
-                    <FileText size={16} />
-                    دارای PDF
-                  </span>
-                )}
-              </div>
-
-              {/* عنوان */}
-              <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-[var(--color-text-dark)] leading-tight mb-4">
-                {article.title}
-              </h1>
-
-              {/* متا اطلاعات */}
-              <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--color-text-light)] border-b border-gray-100 pb-4">
-                <span className="flex items-center gap-1.5">
-                  <Calendar size={16} />
-                  {new Date(article.publishedAt).toLocaleDateString('fa-IR', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  })}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <User size={16} />
-                  {article.author}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Eye size={16} />
-                  {article.views} بازدید
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <MessageCircle size={16} />
-                  {article.comments.filter((c) => c.isApproved).length} نظر
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Clock size={16} />
-                  {readingTime} مطالعه
-                </span>
-              </div>
+          <div className="p-6 md:p-8 lg:p-10" ref={contentRef}>
+            {/* خلاصه */}
+            <div className="bg-[var(--color-primary-bg)] rounded-2xl p-6 mb-8 border-r-4 border-[var(--color-primary)]">
+              <p className="text-[var(--color-text-light)] text-lg leading-relaxed">
+                {article.summary}
+              </p>
             </div>
 
-            {/* ===== محتوای مقاله ===== */}
+            {/* محتوای مقاله */}
             <div
               className="prose prose-lg max-w-none
                 prose-headings:text-[var(--color-text-dark)]
@@ -311,7 +344,7 @@ export default function ArticlePage() {
               dangerouslySetInnerHTML={{ __html: article.content }}
             />
 
-            {/* ===== PDF ===== */}
+            {/* PDF */}
             {hasPdf && (
               <div className="mt-8 p-6 bg-[var(--color-primary-bg)] rounded-2xl border border-[var(--color-primary-lighter)]">
                 <div className="flex flex-wrap items-center justify-between gap-4">
@@ -339,7 +372,7 @@ export default function ArticlePage() {
               </div>
             )}
 
-            {/* ===== تگ‌ها ===== */}
+            {/* تگ‌ها */}
             {tags.length > 0 && (
               <div className="mt-8 border-t border-gray-100 pt-6">
                 <div className="flex flex-wrap items-center gap-2">
@@ -356,78 +389,86 @@ export default function ArticlePage() {
               </div>
             )}
 
-            {/* ===== دکمه بازگشت ===== */}
+            {/* اشتراک‌گذاری */}
             <div className="mt-8 pt-6 border-t border-gray-100 flex flex-wrap justify-between items-center gap-4">
               <Link
                 href="/articles"
-                className="inline-flex items-center gap-2 text-[var(--color-text-light)] hover:text-[var(--color-primary)] transition"
+                className="inline-flex items-center gap-2 text-[var(--color-text-light)] hover:text-[var(--color-primary)] transition group"
               >
-                <ArrowRight size={18} />
+                <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
                 بازگشت به لیست مقالات
               </Link>
+              <div className="flex items-center gap-2">
+                <button className="p-2 text-[var(--color-text-light)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg)] rounded-full transition">
+                  <Heart size={20} />
+                </button>
+                <button className="p-2 text-[var(--color-text-light)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg)] rounded-full transition">
+                  <Bookmark size={20} />
+                </button>
+                <button className="p-2 text-[var(--color-text-light)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-bg)] rounded-full transition">
+                  <Share2 size={20} />
+                </button>
+              </div>
             </div>
           </div>
         </article>
 
-        {/* ============================================================
-            بخش نظرات
-            ============================================================ */}
+        {/* ===== بخش نظرات ===== */}
         <section className="mt-12 bg-white rounded-3xl shadow-lg p-6 md:p-8 border border-gray-100">
           <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
             <MessageCircle className="text-[var(--color-primary)]" />
-            نظرات ({article.comments.filter((c) => c.isApproved).length})
+            نظرات ({approvedComments.length})
           </h3>
 
-          {/* ===== لیست نظرات تایید شده ===== */}
-          {article.comments.filter((c) => c.isApproved).length === 0 ? (
+          {/* لیست نظرات */}
+          {approvedComments.length === 0 ? (
             <div className="text-center py-8 text-[var(--color-text-light)]">
               <div className="text-4xl mb-3">💬</div>
               <p>هنوز نظری ثبت نشده است. اولین نفر باشید!</p>
             </div>
           ) : (
             <div className="space-y-6">
-              {article.comments
-                .filter((c) => c.isApproved)
-                .map((comment) => (
-                  <div key={comment.id} className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="font-semibold text-[var(--color-text-dark)]">
-                          {comment.user?.name || comment.author}
-                        </div>
-                        <div className="text-xs text-[var(--color-text-light)] mt-0.5">
-                          {new Date(comment.createdAt).toLocaleDateString('fa-IR', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </div>
+              {approvedComments.map((comment) => (
+                <div key={comment.id} className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="font-semibold text-[var(--color-text-dark)]">
+                        {comment.user?.name || comment.author}
+                      </div>
+                      <div className="text-xs text-[var(--color-text-light)] mt-0.5">
+                        {new Date(comment.createdAt).toLocaleDateString('fa-IR', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
                       </div>
                     </div>
-                    <p className="text-[var(--color-text-light)] mt-3 leading-relaxed">
-                      {comment.content}
-                    </p>
-
-                    {/* پاسخ ادمین */}
-                    {comment.adminReply && (
-                      <div className="mt-4 mr-6 bg-[var(--color-primary-bg)] border-r-4 border-[var(--color-primary)] p-4 rounded-xl">
-                        <div className="text-sm font-semibold text-[var(--color-primary)] flex items-center gap-2">
-                          <User size={16} />
-                          پاسخ از طرف مطب
-                        </div>
-                        <p className="text-[var(--color-text-light)] mt-1 text-sm leading-relaxed">
-                          {comment.adminReply}
-                        </p>
-                      </div>
-                    )}
+                    <div className="text-[var(--color-primary)] text-sm font-medium">✅ تایید شده</div>
                   </div>
-                ))}
+                  <p className="text-[var(--color-text-light)] mt-3 leading-relaxed">
+                    {comment.content}
+                  </p>
+
+                  {/* پاسخ ادمین */}
+                  {comment.adminReply && (
+                    <div className="mt-4 mr-6 bg-[var(--color-primary-bg)] border-r-4 border-[var(--color-primary)] p-4 rounded-xl">
+                      <div className="text-sm font-semibold text-[var(--color-primary)] flex items-center gap-2">
+                        <User size={16} />
+                        پاسخ از طرف مطب
+                      </div>
+                      <p className="text-[var(--color-text-light)] mt-1 text-sm leading-relaxed">
+                        {comment.adminReply}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
 
-          {/* ===== فرم ثبت نظر ===== */}
+          {/* فرم ثبت نظر */}
           <div className="mt-8 border-t border-gray-200 pt-8">
             <h4 className="text-xl font-bold mb-4">نظر خود را بنویسید</h4>
 

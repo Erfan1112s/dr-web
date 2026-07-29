@@ -4,46 +4,51 @@ import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
-// GET: دریافت همه مکالمات (با فیلتر)
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     if (!session || session.user.role !== 'admin') {
       return NextResponse.json({ error: 'دسترسی غیرمجاز' }, { status: 403 });
     }
 
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId');
-    const sessionId = searchParams.get('sessionId');
-    const limit = parseInt(searchParams.get('limit') || '50');
-
-    const where: any = {};
-    if (userId) where.userId = parseInt(userId);
-    if (sessionId) where.sessionId = sessionId;
-
+    // دریافت آخرین ۱۰۰ پیام (با احتساب پاسخ ادمین)
     const messages = await prisma.chatMessage.findMany({
-      where,
       orderBy: { createdAt: 'desc' },
-      take: limit,
+      take: 100,
       include: {
         user: {
-          select: {
-            id: true,
-            name: true,
-            phone: true,
-          },
+          select: { id: true, name: true, phone: true },
         },
       },
     });
 
-    // گروه‌بندی بر اساس sessionId
-    const groupedMessages: Record<string, any[]> = {};
+    // گروه‌بندی بر اساس sessionId (هر session = یک مکالمه)
+    const groups: Record<string, any[]> = {};
     for (const msg of messages) {
-      if (!groupedMessages[msg.sessionId]) {
-        groupedMessages[msg.sessionId] = [];
+      if (!groups[msg.sessionId]) {
+        groups[msg.sessionId] = [];
       }
-      groupedMessages[msg.sessionId].push(msg);
+      groups[msg.sessionId].push(msg);
     }
+
+    // تبدیل به آرایه با اطلاعات مفید
+    const groupedMessages = Object.keys(groups).map((sessionId) => {
+      const msgs = groups[sessionId];
+      const lastMsg = msgs[0] || {};
+      const user = msgs[0]?.user;
+      return {
+        sessionId,
+        userId: user?.id || null,
+        userName: user?.name || 'کاربر مهمان',
+        userPhone: user?.phone || '-',
+        messages: msgs,
+        lastMessage: lastMsg.userMsg || '',
+        createdAt: lastMsg.createdAt || new Date().toISOString(),
+        isRead: msgs.some((m: any) => !m.isRead),
+        // همچنین بررسی کنید که آیا پاسخ ادمین داده شده یا خیر
+        hasAdminReply: msgs.some((m: any) => m.adminReply !== null),
+      };
+    });
 
     return NextResponse.json({
       total: messages.length,
@@ -51,12 +56,17 @@ export async function GET(req: NextRequest) {
       messages,
     });
   } catch (error) {
-    console.error('❌ Error fetching chat messages:', error);
-    return NextResponse.json({ error: 'خطا در دریافت پیام‌ها' }, { status: 500 });
+    console.error('❌ Error fetching chat messages for admin:', error);
+    return NextResponse.json(
+      { error: 'خطا در دریافت پیام‌ها' },
+      { status: 500 }
+    );
   }
 }
 
-// PUT: به‌روزرسانی وضعیت خوانده شده
+// ============================================================
+// PUT: علامت‌گذاری پیام‌ها به عنوان خوانده شده (اختیاری)
+// ============================================================
 export async function PUT(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -66,7 +76,10 @@ export async function PUT(req: NextRequest) {
 
     const { ids } = await req.json();
     if (!ids || !Array.isArray(ids)) {
-      return NextResponse.json({ error: 'آیدی‌های نامعتبر' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'آیدی‌های نامعتبر' },
+        { status: 400 }
+      );
     }
 
     await prisma.chatMessage.updateMany({
@@ -77,6 +90,9 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('❌ Error marking messages as read:', error);
-    return NextResponse.json({ error: 'خطا در به‌روزرسانی وضعیت' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'خطا در به‌روزرسانی وضعیت خوانده شده' },
+      { status: 500 }
+    );
   }
 }

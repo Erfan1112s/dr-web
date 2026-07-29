@@ -19,7 +19,7 @@ export const services = [
     slug: "mamai",
     icon: "🤱",
     title: "مامایی",
-    image: "/images/services/mamai.jpg",
+    image: "/images/services/mamai.jpeg",
     shortDesc: "مراقبت‌های تخصصی دوران بارداری، زایمان و پس از زایمان با رویکردی گرم و حرفه‌ای",
     fullDesc: `
       <h2>خدمات تخصصی مامایی</h2>
@@ -52,7 +52,7 @@ export const services = [
     slug: "zanan",
     icon: "👩‍⚕️",
     title: "متخصص زنان و زایمان",
-    image: "/images/services/zanan.jpg",
+    image: "/images/services/zanan.jpeg",
     shortDesc: "تشخیص و درمان تخصصی بیماری‌های زنان، عفونت‌ها و اختلالات هورمونی",
     fullDesc: `
       <h2>خدمات تخصصی زنان و زایمان</h2>
@@ -85,7 +85,7 @@ export const services = [
     slug: "nazaii",
     icon: "👶",
     title: "نازایی و ناباروری",
-    image: "/images/services/nazaii.jpg",
+    image: "/images/services/nazaii.png",
     shortDesc: "مشاوره و درمان تخصصی ناباروری با بهره‌گیری از روش‌های پیشرفته و نوین",
     fullDesc: `
       <h2>خدمات تخصصی نازایی و ناباروری</h2>
@@ -118,7 +118,7 @@ export const services = [
     slug: "sono",
     icon: "🩺",
     title: "سونوگرافی",
-    image: "/images/services/sono.jpg",
+    image: "/images/services/sono.png",
     shortDesc: "سونوگرافی تخصصی زنان، بارداری و نازایی با دستگاه‌های پیشرفته و دقیق",
     fullDesc: `
       <h2>خدمات تخصصی سونوگرافی</h2>
@@ -151,7 +151,7 @@ export const services = [
     slug: "before-pregnancy",
     icon: "🤰",
     title: "مراقبت‌های قبل از زایمان",
-    image: "/images/services/before-pregnancy.jpg",
+    image: "/images/services/before-pregnancy.png",
     shortDesc: "آمادگی کامل جسمی، روحی و روانی برای یک بارداری سالم و زایمان آسان",
     fullDesc: `
       <h2>مراقبت‌های تخصصی قبل از زایمان</h2>
@@ -185,7 +185,7 @@ export const services = [
     slug: "after-pregnancy",
     icon: "🌸",
     title: "مراقبت‌های بعد از زایمان",
-    image: "/images/services/after-pregnancy.jpg",
+    image: "/images/services/after-pregnancy.png",
     shortDesc: "مراقبت‌های جامع و تخصصی برای مادر و نوزاد در دوران نقاهت و شیردهی",
     fullDesc: `
       <h2>مراقبت‌های تخصصی بعد از زایمان</h2>
