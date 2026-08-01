@@ -41,7 +41,6 @@ export default function Header() {
   const navItems = [
     { id: 'services', label: 'خدمات' },
     { id: 'about', label: 'درباره من' },
-    { id: 'faq', label: 'سوالات متداول' },
     { id: 'contact', label: 'تماس با ما' },
   ];
 

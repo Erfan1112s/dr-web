@@ -3,15 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { prisma } from '@/lib/prisma';
 
-// ============================================================
-// راه‌اندازی کلاینت OpenRouter
-// ============================================================
 const openrouter = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: 'https://openrouter.ai/api/v1', // آدرس OpenRouter
+  baseURL: 'https://openrouter.ai/api/v1',
 });
 
-// پرامپت سیستم (مشخصات مطب)
 const SYSTEM_PROMPT = `تو یک دستیار هوشمند برای مطب تخصصی مامایی خانم فرشته صادقی هستی.
 اطلاعات مطب:
 - نام: فرشته صادقی
@@ -33,13 +29,22 @@ export async function POST(req: NextRequest) {
     const { message, sessionId, userId, history } = await req.json();
 
     if (!message) {
-      return NextResponse.json(
-        { error: 'پیام را وارد کنید' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'پیام را وارد کنید' }, { status: 400 });
     }
 
-    // ساخت تاریخچه پیام‌ها برای OpenRouter
+    const existingMessage = await prisma.chatMessage.findFirst({
+      where: {
+        userMsg: message,
+        sessionId: sessionId || 'guest-session',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // اگر پاسخ ادمین وجود داشت، آن را برگردان (بدون نیاز به AI)
+    if (existingMessage?.adminReply) {
+      return NextResponse.json({ reply: existingMessage.adminReply });
+    }
+
     const messages = [
       { role: 'system', content: SYSTEM_PROMPT },
       ...(history || []).map((msg: any) => ({
@@ -49,18 +54,6 @@ export async function POST(req: NextRequest) {
       { role: 'user', content: message },
     ];
 
-    // ============================================================
-    // انتخاب مدل مناسب
-    // ============================================================
-    // می‌تونی از هر مدلی که OpenRouter پشتیبانی می‌کنه استفاده کنی.
-    // چند نمونه:
-    // - 'openai/gpt-4o' (قوی‌ترین)
-    // - 'openai/gpt-3.5-turbo' (سریع و کم‌هزینه)
-    // - 'anthropic/claude-3.5-sonnet' (کلود)
-    // - 'google/gemini-2.5-flash' (جمینی)
-    // - 'meta-llama/llama-4' (متا)
-    // - 'openrouter/free' (مدل‌های رایگان - سهمیه محدود)
-    // ============================================================
     const model = process.env.OPENROUTER_MODEL || 'openai/gpt-3.5-turbo';
 
     const completion = await openrouter.chat.completions.create({
@@ -73,19 +66,18 @@ export async function POST(req: NextRequest) {
     const reply = completion.choices[0]?.message?.content ||
       'متاسفانه نتوانستم پاسخ را پیدا کنم. لطفاً دوباره تلاش کنید.';
 
-    // ذخیره در دیتابیس
     await prisma.chatMessage.create({
       data: {
         sessionId: sessionId || 'guest-session',
         userId: userId ? parseInt(userId) : null,
         userMsg: message,
         botMsg: reply,
+        adminReply: null,
         isRead: false,
       },
     });
 
     return NextResponse.json({ reply });
-
   } catch (error) {
     console.error('❌ Error in chat API:', error);
     return NextResponse.json(
@@ -94,10 +86,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-
-let finalReply = reply;
-if (existingMessage?.adminReply) {
-  finalReply = existingMessage.adminReply;
-}
-
-return NextResponse.json({ reply: finalReply });

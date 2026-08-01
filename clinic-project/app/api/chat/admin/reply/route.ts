@@ -20,7 +20,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // به‌روزرسانی پیام با پاسخ ادمین
     const updated = await prisma.chatMessage.update({
       where: { id: parseInt(messageId) },
       data: { adminReply: reply },

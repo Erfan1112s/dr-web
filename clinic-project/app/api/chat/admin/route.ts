@@ -11,7 +11,6 @@ export async function GET() {
       return NextResponse.json({ error: 'دسترسی غیرمجاز' }, { status: 403 });
     }
 
-    // دریافت آخرین ۱۰۰ پیام (با احتساب پاسخ ادمین)
     const messages = await prisma.chatMessage.findMany({
       orderBy: { createdAt: 'desc' },
       take: 100,
@@ -22,7 +21,6 @@ export async function GET() {
       },
     });
 
-    // گروه‌بندی بر اساس sessionId (هر session = یک مکالمه)
     const groups: Record<string, any[]> = {};
     for (const msg of messages) {
       if (!groups[msg.sessionId]) {
@@ -31,7 +29,6 @@ export async function GET() {
       groups[msg.sessionId].push(msg);
     }
 
-    // تبدیل به آرایه با اطلاعات مفید
     const groupedMessages = Object.keys(groups).map((sessionId) => {
       const msgs = groups[sessionId];
       const lastMsg = msgs[0] || {};
@@ -45,7 +42,6 @@ export async function GET() {
         lastMessage: lastMsg.userMsg || '',
         createdAt: lastMsg.createdAt || new Date().toISOString(),
         isRead: msgs.some((m: any) => !m.isRead),
-        // همچنین بررسی کنید که آیا پاسخ ادمین داده شده یا خیر
         hasAdminReply: msgs.some((m: any) => m.adminReply !== null),
       };
     });
@@ -64,9 +60,6 @@ export async function GET() {
   }
 }
 
-// ============================================================
-// PUT: علامت‌گذاری پیام‌ها به عنوان خوانده شده (اختیاری)
-// ============================================================
 export async function PUT(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -76,10 +69,7 @@ export async function PUT(req: NextRequest) {
 
     const { ids } = await req.json();
     if (!ids || !Array.isArray(ids)) {
-      return NextResponse.json(
-        { error: 'آیدی‌های نامعتبر' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'آیدی‌های نامعتبر' }, { status: 400 });
     }
 
     await prisma.chatMessage.updateMany({
