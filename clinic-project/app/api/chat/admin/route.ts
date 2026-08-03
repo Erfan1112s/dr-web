@@ -41,7 +41,7 @@ export async function GET() {
         messages: msgs,
         lastMessage: lastMsg.userMsg || '',
         createdAt: lastMsg.createdAt || new Date().toISOString(),
-        isRead: msgs.some((m: any) => !m.isRead),
+        isRead: msgs.some((m: any) => m.isRead),
         hasAdminReply: msgs.some((m: any) => m.adminReply !== null),
       };
     });

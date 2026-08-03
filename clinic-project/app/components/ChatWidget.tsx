@@ -1,13 +1,13 @@
 // components/ChatWidget.tsx
 'use client';
-
-import { useState, useRef, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageCircle, X, Send, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSession } from 'next-auth/react';
 
 type Message = {
-  role: 'user' | 'bot';
+  role: 'user' | 'bot' | 'admin';
+  id?:number;
   content: string;
   timestamp: Date;
 };
@@ -24,6 +24,7 @@ export default function ChatWidget() {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sessionId, setSessionId] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ایجاد یا بازیابی sessionId
@@ -36,9 +37,59 @@ export default function ChatWidget() {
     return sessionId;
   };
 
+    useEffect(() => {
+    setSessionId(getSessionId());
+  }, []);
+
+
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+   const loadHistory = useCallback(async (currentSessionId = sessionId) => {
+    if (!currentSessionId) return;
+
+    try {
+      const res = await fetch(`/api/chat?sessionId=${encodeURIComponent(currentSessionId)}`);
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const historyMessages: Message[] = (data.messages || []).flatMap((msg: any) => {
+        const timestamp = new Date(msg.createdAt);
+        const items: Message[] = [
+          { id: msg.id, role: 'user', content: msg.userMsg, timestamp },
+        ];
+
+        if (msg.botMsg) {
+          items.push({ id: msg.id, role: 'bot', content: msg.botMsg, timestamp });
+        }
+
+        if (msg.adminReply) {
+          items.push({ id: msg.id, role: 'admin', content: msg.adminReply, timestamp });
+        }
+
+        return items;
+      });
+
+      if (historyMessages.length > 0) {
+        setMessages(historyMessages);
+      }
+    } catch (error) {
+      console.error('❌ Error loading chat history:', error);
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!isOpen || !sessionId) return;
+
+    loadHistory(sessionId);
+    const intervalId = window.setInterval(() => loadHistory(sessionId), 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [isOpen, loadHistory, sessionId]);
+
+
 
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
@@ -53,7 +104,8 @@ export default function ChatWidget() {
     setLoading(true);
 
     try {
-      const sessionId = getSessionId();
+      const currentSessionId = sessionId || getSessionId();
+      setSessionId(currentSessionId);
       const userId = session?.user?.id || null;
 
       const res = await fetch('/api/chat', {
@@ -61,7 +113,7 @@ export default function ChatWidget() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: input,
-          sessionId,
+          sessionId: currentSessionId,
           userId,
           history: messages,
         }),
@@ -71,6 +123,7 @@ export default function ChatWidget() {
 
       const data = await res.json();
       const botMsg: Message = {
+        id: data.id,
         role: 'bot',
         content: data.reply,
         timestamp: new Date(),

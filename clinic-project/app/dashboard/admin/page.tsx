@@ -23,8 +23,7 @@ import {
   FileText,
   Reply,
 } from 'lucide-react';
-import { group } from 'console';
-import { Messages } from 'openai/resources/chat/completions.mjs';
+
 
 // ============================================================
 // تایپ‌ها
@@ -689,47 +688,44 @@ export default function AdminDashboard() {
           )}
 
           {/* ===== تب چت‌ها ===== */}
-
-
+                    {activeTab === 'chats' && (
+            <div>
+              <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+                <MessageCircle className="text-[var(--color-primary)]" />
+                مدیریت چت‌ها
+              </h2>
+                              {chatGroups.length === 0 ? (
+                <div className="text-center py-12 text-[var(--color-text-light)]">
+                  <div className="text-6xl mb-4">💬</div>
+                  <p>هیچ گفتگویی ثبت نشده است</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                    {chatGroups.map((group) => (
+                      <button
+                        key={group.sessionId}
+                        type="button"
+                        onClick={() => {
+                          setSelectedChat(group);
+                          setChatReply('');
+                        }}
+                        className={`w-full text-right rounded-2xl p-4 border transition ${
+                          selectedChat?.sessionId === group.sessionId
+                            ? 'border-[var(--color-primary)] bg-[var(--color-primary-lighter)]'
+                            : 'border-gray-100 bg-gray-50 hover:bg-gray-100'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-bold flex items-center gap-2">
+                              {group.userName}
+                              {!group.isRead && (
+                                <span className="w-2 h-2 bg-red-500 rounded-full" />
+                              )}
+                            </div>
   
-  // ... (بقیه کدها)
-
-  // ===== تب چت‌ها (با دکمه ارسال واقعی) =====
-  {activeTab === 'chats' && (
-    <div>
-      {/* ... (بقیه کدهای تب چت) ... */}
-
-      {/* بخش پاسخ به کاربر */}
-      <div className="border-t border-gray-200 pt-3">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={chatReply}
-            onChange={(e) => setChatReply(e.target.value)}
-            placeholder="پاسخ به کاربر..."
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-2xl focus:border-[var(--color-primary)] focus:outline-none"
-          />
-          <button
-            onClick={() => {
-              const firstMsg = selectedChat?.messages[0];
-              if (firstMsg) {
-                sendAdminReply(firstMsg.id, chatReply);
-              }
-            }}
-            className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-2xl hover:bg-[var(--color-primary-dark)] transition"
-          >
-            <Send size={18} />
-          </button>
-        </div>
-        <div className="text-xs text-[var(--color-text-light)] mt-2">
-          پاسخ شما به عنوان «پاسخ ادمین» ذخیره و برای کاربر نمایش داده می‌شود.
-        </div>
-      </div>
-    </div>
-  )}
-
-  // ... (بقیه کدها)
-}
+  
                             <div className="text-sm text-[var(--color-text-light)]">
                               {group.userPhone}
                             </div>
@@ -739,14 +735,13 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                         <div className="text-sm text-gray-600 mt-2 line-clamp-2">
-                          {group.lastMessage}
-                        </div>
-                      </div>
+                          {group.lastMessage || 'بدون پیام'}                        </div>
+                      </button>
+                                
                     ))}
                   </div>
 
-                  <div className="bg-gray-50 rounded-2xl p-4 max-h-[600px] flex flex-col">
-                    {selectedChat ? (
+                  <div className="lg:col-span-2 bg-gray-50 rounded-2xl p-4 max-h-[600px] flex flex-col">                    {selectedChat ? (
                       <>
                         <div className="border-b border-gray-200 pb-3 mb-3">
                           <div className="font-bold">{selectedChat.userName}</div>
@@ -756,15 +751,23 @@ export default function AdminDashboard() {
                         </div>
                         <div className="flex-1 overflow-y-auto space-y-3 mb-4">
                           {selectedChat.messages.map((msg: any, idx: number) => (
-                            <div key={idx}>
-                              <div className="bg-white rounded-2xl p-3 shadow-sm">
+                            <div key={msg.id ?? idx}>                              <div className="bg-white rounded-2xl p-3 shadow-sm">
                                 <div className="text-sm font-medium text-[var(--color-primary)]">کاربر:</div>
                                 <div className="text-sm text-gray-700">{msg.userMsg}</div>
                               </div>
-                              <div className="bg-[var(--color-primary-bg)] rounded-2xl p-3 shadow-sm mt-2">
-                                <div className="text-sm font-medium text-[var(--color-primary)]">چت‌بات:</div>
-                                <div className="text-sm text-gray-700">{msg.botMsg}</div>
-                              </div>
+                                                        {msg.botMsg && (
+                                <div className="bg-[var(--color-primary-bg)] rounded-2xl p-3 shadow-sm mt-2">
+                                  <div className="text-sm font-medium text-[var(--color-primary)]">چت‌بات:</div>
+                                  <div className="text-sm text-gray-700">{msg.botMsg}</div>
+                                </div>
+                              )}
+                              {msg.adminReply && (
+                                <div className="bg-green-50 rounded-2xl p-3 shadow-sm mt-2">
+                                  <div className="text-sm font-medium text-green-700">ادمین:</div>
+                                  <div className="text-sm text-gray-700">{msg.adminReply}</div>
+                                </div>
+                              )}
+
                               <div className="text-xs text-[var(--color-text-light)] text-left mt-1">
                                 {new Date(msg.createdAt).toLocaleString('fa-IR')}
                               </div>
@@ -782,12 +785,14 @@ export default function AdminDashboard() {
                             />
                             <button
                               onClick={() => {
-                                if (chatReply.trim()) {
-                                  alert(`پاسخ به ${selectedChat.userName}:\n${chatReply}`);
-                                  setChatReply('');
+                                 const firstMsg = selectedChat.messages[0];
+                                if (firstMsg) {
+                                  sendAdminReply(firstMsg.id, chatReply);
+
                                 }
                               }}
                               className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-2xl hover:bg-[var(--color-primary-dark)] transition"
+                             title="ارسال پاسخ"
                             >
                               <Send size={18} />
                             </button>
