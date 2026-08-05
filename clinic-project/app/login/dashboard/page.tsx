@@ -122,7 +122,7 @@ export default function DashboardPage() {
 
           {appointments.length === 0 ? (
             <div className="text-center py-12 text-[var(--color-text-light)]">
-              <div className="text-6xl mb-4">📅</div>
+              <div className="text-6xl mb-4"></div>
               <p>شما هنوز هیچ نوبتی ثبت نکرده‌اید</p>
               <a href="/appointment" className="text-[var(--color-primary)] hover:underline mt-2 inline-block">
                 ثبت نوبت جدید

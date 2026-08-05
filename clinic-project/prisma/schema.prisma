@@ -45,7 +45,7 @@ model ChatMessage {
   userId      Int?     @map("user_id")
   userMsg     String   @map("user_message")
   botMsg      String   @map("bot_message")
-  adminReply  String?  @map("admin_reply") // ← اضافه شد: پاسخ ادمین
+  adminReply  String?  @map("admin_reply")
   isRead      Boolean  @default(false) @map("is_read")
   createdAt   DateTime @default(now()) @map("created_at")
 
@@ -54,7 +54,7 @@ model ChatMessage {
   @@map("chat_messages")
 }
 
-// 🆕 مدل مقاله
+//  مدل مقاله
 model Article {
   id          Int      @id @default(autoincrement())
   title       String
@@ -76,7 +76,7 @@ model Article {
   @@map("articles")
 }
 
-// 🆕 مدل نظر
+//  مدل نظر
 model Comment {
   id          Int      @id @default(autoincrement())
   content     String

@@ -1,7 +1,7 @@
 // app/components/ui/ArticlesPreview.tsx
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
-import { Calendar, Eye, ArrowLeft } from 'lucide-react'; // ✅ ArrowLeft اضافه شد
+import { Calendar, Eye, ArrowLeft } from 'lucide-react'; 
 
 export default async function ArticlesPreview() {
   const articles = await prisma.article.findMany({
@@ -60,7 +60,7 @@ export default async function ArticlesPreview() {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  '📄'
+                  ''
                 )}
               </div>
               <div className="p-6">

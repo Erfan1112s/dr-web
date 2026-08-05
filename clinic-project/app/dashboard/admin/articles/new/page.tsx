@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowRight, Save, X, Upload, FileText } from 'lucide-react';
+import { Save, X, FileText, Loader2 } from 'lucide-react';
 import { slugify } from '@/lib/slug';
 
 export default function NewArticlePage() {
@@ -19,7 +19,7 @@ export default function NewArticlePage() {
     category: '',
     tags: '',
     image: '',
-    pdfUrl: '', // ذخیره آدرس PDF
+    pdfUrl: '',
   });
   const [pdfFile, setPdfFile] = useState<File | null>(null);
 
@@ -38,6 +38,45 @@ export default function NewArticlePage() {
     setForm({ ...form, slug });
   };
 
+  // ============================================================
+  // آپلود تصویر
+  // ============================================================
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('لطفاً فقط فایل تصویر انتخاب کنید');
+      return;
+    }
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setForm(prev => ({ ...prev, image: data.url }));
+        alert('✅ تصویر با موفقیت آپلود شد');
+      } else {
+        alert(data.error || 'خطا در آپلود تصویر');
+      }
+    } catch (error) {
+      console.error('❌ Upload error:', error);
+      alert('خطا در ارتباط با سرور');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // ============================================================
+  // آپلود PDF
+  // ============================================================
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -81,7 +120,6 @@ export default function NewArticlePage() {
     e.preventDefault();
     setLoading(true);
 
-    // ابتدا PDF را آپلود کن (اگر انتخاب شده)
     let uploadedPdfUrl = form.pdfUrl;
     if (pdfFile) {
       const url = await uploadPdf();
@@ -92,7 +130,6 @@ export default function NewArticlePage() {
       uploadedPdfUrl = url;
     }
 
-    // سپس مقاله را ثبت کن
     try {
       const normalizedSlug = slugify(form.slug);
       if (!normalizedSlug) {
@@ -110,6 +147,7 @@ export default function NewArticlePage() {
           pdfUrl: uploadedPdfUrl,
         }),
       });
+
       if (res.ok) {
         router.push('/dashboard/admin');
       } else {
@@ -219,15 +257,28 @@ export default function NewArticlePage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">تصویر (آدرس)</label>
+              <label className="block text-sm font-medium mb-2">تصویر شاخص</label>
               <input
-                type="text"
-                name="image"
-                value={form.image}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:border-[var(--color-primary)] focus:outline-none"
-                placeholder="/images/articles/..."
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="w-full px-4 py-3 border border-gray-300 rounded-2xl file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[var(--color-primary)] file:text-white hover:file:bg-[var(--color-primary-dark)] transition"
+                disabled={uploading}
               />
+              {uploading && (
+                <div className="mt-2 text-sm text-blue-500 flex items-center gap-2">
+                  <Loader2 className="animate-spin" size={16} />
+                  در حال آپلود...
+                </div>
+              )}
+              {form.image && (
+                <div className="mt-2 text-sm text-green-600 flex items-center gap-2">
+                  ✅ تصویر آپلود شد
+                  <a href={form.image} target="_blank" className="underline text-blue-500" rel="noreferrer">
+                    مشاهده
+                  </a>
+                </div>
+              )}
             </div>
           </div>
 
@@ -250,12 +301,14 @@ export default function NewArticlePage() {
               {form.pdfUrl && !pdfFile && (
                 <span className="text-sm text-blue-600 flex items-center gap-1">
                   <FileText size={16} />
-                  <a href={form.pdfUrl} target="_blank" className="underline">مشاهده PDF فعلی</a>
+                  <a href={form.pdfUrl} target="_blank" className="underline" rel="noreferrer">
+                    مشاهده PDF فعلی
+                  </a>
                 </span>
               )}
             </div>
             <p className="text-xs text-[var(--color-text-light)] mt-2">
-              فقط فایل‌های PDF (حداکثر ۵ مگابایت) – پس از آپلود، لینک دانلود در صفحه مقاله نمایش داده می‌شود.
+              فقط فایل‌های PDF (حداکثر ۵ مگابایت)
             </p>
           </div>
 

@@ -118,7 +118,7 @@ export default function UserDashboard() {
       href="/"
       className="flex items-center gap-2 text-gray-600 hover:text-[var(--color-primary)] transition px-4 py-2 bg-gray-100 rounded-full"
     >
-      🏠 صفحه اصلی
+       صفحه اصلی
     </Link>
               <button
                 onClick={() => signOut()}

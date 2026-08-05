@@ -8,7 +8,7 @@ async function fixSlugs() {
     const articles = await prisma.article.findMany();
     
     if (articles.length === 0) {
-      console.log('⚠️ هیچ مقاله‌ای در دیتابیس یافت نشد.');
+      console.log('هیچ مقاله‌ای در دیتابیس یافت نشد.');
       return;
     }
 

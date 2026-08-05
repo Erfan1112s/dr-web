@@ -1,36 +1,34 @@
-# Dockerfile — runs clinic-project (Next.js + Prisma) for local/demo use.
-# Place this file in the root of "clinic-project", next to package.json.
-#
-# Build once inside Linux, run anywhere Docker runs — including a Windows
-# laptop via Docker Desktop — without touching your existing node_modules.
-
-FROM node:20-bookworm-slim
+# Dockerfile
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Prisma's query engine needs openssl + ca-certificates to talk to Postgres
-RUN apt-get update -y \
-    && apt-get install -y --no-install-recommends openssl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install dependencies first so this layer is cached when only source changes
-COPY package.json package-lock.json* ./
+COPY package*.json ./
 RUN npm ci
 
-# Copy the rest of the project source
 COPY . .
-
-# Placeholder so `prisma generate` (which reads prisma.config.ts) has a URL
-# to parse during the build. The REAL url is supplied at container runtime
-# via docker-compose, so this value is never used to actually connect.
-ARG DATABASE_URL="postgresql://postgres:postgres@db:5432/clinic?schema=public"
-ENV DATABASE_URL=$DATABASE_URL
-
-RUN npx prisma generate
 RUN npm run build
 
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/prisma ./prisma
+
+USER nextjs
+
 EXPOSE 3000
 
-# Apply any pending Prisma migrations, then start the production server
-CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]
+ENV PORT=3000
+
+CMD ["npm", "start"]

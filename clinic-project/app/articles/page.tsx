@@ -4,9 +4,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Calendar, Eye, Clock, Search, Tag, ArrowLeft } from 'lucide-react';
 
-// ============================================================
-// تابع محاسبه زمان مطالعه
-// ============================================================
 function getReadingTime(content: string): string {
   const wordsPerMinute = 200;
   const words = content.replace(/<[^>]*>/g, '').split(/\s+/).length;
@@ -14,24 +11,23 @@ function getReadingTime(content: string): string {
   return minutes > 1 ? `${minutes} دقیقه` : '۱ دقیقه';
 }
 
-// ============================================================
-// کامپوننت اصلی
-// ============================================================
 export default async function ArticlesPage({
   searchParams,
 }: {
-  searchParams: { category?: string; page?: string; search?: string };
+  searchParams: Promise<{ category?: string; page?: string; search?: string }>;
 }) {
-  const category = searchParams.category || '';
-  const page = parseInt(searchParams.page || '1');
-  const search = searchParams.search || '';
+  
+  const params = await searchParams;
+  const category = params.category || '';
+  const page = parseInt(params.page || '1');
+  const search = params.search || '';
   const limit = 6;
   const skip = (page - 1) * limit;
 
-  // شرط‌های جستجو
+  // ساخت شرط جستجو
   const where: any = {};
   if (category) where.category = category;
-  if (search) {
+  if (search && search.trim()) {
     where.OR = [
       { title: { contains: search, mode: 'insensitive' } },
       { summary: { contains: search, mode: 'insensitive' } },
@@ -82,7 +78,7 @@ export default async function ArticlesPage({
 
   return (
     <div className="min-h-screen bg-[var(--color-bg-light)]">
-      {/* ===== هدر با گرادینت ===== */}
+      {/* هدر */}
       <div className="relative bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-light)] text-white py-16 md:py-24 overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-10 right-10 w-72 h-72 bg-white rounded-full blur-3xl" />
@@ -99,7 +95,7 @@ export default async function ArticlesPage({
             مطالب مفید و علمی در زمینه مامایی، بارداری، سلامت زنان و مراقبت‌های پس از زایمان
           </p>
 
-          {/* ===== جستجو ===== */}
+          {/* فرم جستجو */}
           <div className="mt-8 max-w-xl mx-auto">
             <form method="GET" className="relative">
               <input
@@ -120,15 +116,15 @@ export default async function ArticlesPage({
         </div>
       </div>
 
-      {/* ===== محتوای اصلی ===== */}
+      {/* محتوای اصلی */}
       <div className="container max-w-6xl mx-auto px-4 py-12">
         <div className="flex flex-col lg:flex-row gap-12">
-          {/* ===== ستون اصلی ===== */}
+          {/* ستون اصلی */}
           <div className="flex-1">
             {/* فیلتر دسته‌بندی */}
             <div className="flex flex-wrap items-center gap-2 mb-8">
               <Link
-                href="/articles"
+                href={`/articles${search ? `?search=${encodeURIComponent(search)}` : ''}`}
                 className={`px-4 py-2 rounded-full text-sm font-medium transition ${
                   !category
                     ? 'bg-[var(--color-primary)] text-white'
@@ -152,20 +148,39 @@ export default async function ArticlesPage({
               ))}
             </div>
 
+            {/* نمایش عبارت جستجو */}
+            {search && (
+              <div className="mb-6 text-[var(--color-text-light)] flex flex-wrap items-center gap-2">
+                <span>نتیجه جستجو برای:</span>
+                <span className="font-bold text-[var(--color-text-dark)]">"{search}"</span>
+                <span className="text-sm text-gray-400">•</span>
+                <Link
+                  href="/articles"
+                  className="text-[var(--color-primary)] hover:underline text-sm"
+                >
+                  حذف فیلتر
+                </Link>
+              </div>
+            )}
+
             {/* لیست مقالات */}
             {articles.length === 0 ? (
               <div className="bg-white rounded-3xl shadow-sm p-12 text-center">
                 <div className="text-6xl mb-4">🔍</div>
                 <h3 className="text-2xl font-bold mb-2 text-[var(--color-text-dark)]">نتیجه‌ای یافت نشد</h3>
                 <p className="text-[var(--color-text-light)]">
-                  با عبارت "{search}" مقاله‌ای پیدا نشد. لطفاً عبارت دیگری را جستجو کنید.
+                  {search
+                    ? `با عبارت "${search}" مقاله‌ای پیدا نشد. لطفاً عبارت دیگری را جستجو کنید.`
+                    : 'هیچ مقاله‌ای منتشر نشده است.'}
                 </p>
-                <Link
-                  href="/articles"
-                  className="inline-block mt-6 text-[var(--color-primary)] hover:underline"
-                >
-                  ← مشاهده همه مقالات
-                </Link>
+                {search && (
+                  <Link
+                    href="/articles"
+                    className="inline-block mt-6 text-[var(--color-primary)] hover:underline"
+                  >
+                    ← مشاهده همه مقالات
+                  </Link>
+                )}
               </div>
             ) : (
               <div className="space-y-8">
@@ -175,7 +190,6 @@ export default async function ArticlesPage({
                     className="group bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-500 border border-gray-100"
                   >
                     <div className="grid md:grid-cols-3 gap-0">
-                      {/* تصویر */}
                       <div className="relative h-56 md:h-full min-h-[200px] bg-gray-100 overflow-hidden">
                         {article.image ? (
                           <Image
@@ -195,8 +209,6 @@ export default async function ArticlesPage({
                           </span>
                         </div>
                       </div>
-
-                      {/* محتوا */}
                       <div className="md:col-span-2 p-6 md:p-8 flex flex-col justify-between">
                         <div>
                           <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--color-text-light)] mb-3">
@@ -213,18 +225,15 @@ export default async function ArticlesPage({
                               {article.views} بازدید
                             </span>
                           </div>
-
                           <Link href={`/articles/${article.slug}`}>
                             <h2 className="text-2xl md:text-3xl font-bold mb-3 text-[var(--color-text-dark)] group-hover:text-[var(--color-primary)] transition-colors line-clamp-2">
                               {article.title}
                             </h2>
                           </Link>
-
                           <p className="text-[var(--color-text-light)] leading-relaxed line-clamp-2">
                             {article.summary}
                           </p>
                         </div>
-
                         <div className="mt-6 flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-gray-100">
                           <div className="flex items-center gap-3 text-sm text-[var(--color-text-light)]">
                             <span className="font-medium text-[var(--color-text-dark)]">
@@ -269,28 +278,16 @@ export default async function ArticlesPage({
                     </Link>
                   );
                 })}
-                {totalPages > 10 && page < totalPages && (
-                  <Link
-                    href={`/articles?${new URLSearchParams({
-                      ...(category && { category }),
-                      ...(search && { search }),
-                      page: String(page + 1),
-                    }).toString()}`}
-                    className="px-4 py-2 rounded-lg bg-white text-[var(--color-text-dark)] hover:bg-gray-100 border border-gray-200 transition"
-                  >
-                    بعدی
-                  </Link>
-                )}
               </div>
             )}
           </div>
 
-          {/* ===== سایدبار ===== */}
+          {/* سایدبار */}
           <div className="lg:w-80 flex-shrink-0 space-y-8">
             {/* مقالات محبوب */}
             <div className="bg-white rounded-3xl shadow-sm p-6 border border-gray-100">
               <h3 className="text-xl font-bold mb-4 text-[var(--color-text-dark)] flex items-center gap-2">
-                🔥 محبوب‌ترین‌ها
+                 محبوب‌ترین‌ها
               </h3>
               {popularArticles.length === 0 ? (
                 <p className="text-[var(--color-text-light)] text-sm">هنوز مقاله‌ای وجود ندارد</p>
@@ -358,6 +355,16 @@ export default async function ArticlesPage({
                 </div>
               )}
             </div>
+
+            {/* دکمه بازگشت به صفحه اصلی */}
+            <Link
+              href="/"
+              className="block bg-white rounded-3xl shadow-sm p-6 border border-gray-100 text-center hover:shadow-md transition group"
+            >
+              <span className="text-[var(--color-text-light)] group-hover:text-[var(--color-primary)] transition flex items-center justify-center gap-2">
+                ← بازگشت به صفحه اصلی
+              </span>
+            </Link>
           </div>
         </div>
       </div>

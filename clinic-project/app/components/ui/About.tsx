@@ -15,7 +15,7 @@ export default function About() {
             <div className="absolute inset-0 bg-gradient-to-tr from-[var(--color-primary)] to-[var(--color-primary-light)] rounded-[3rem] rotate-6 group-hover:rotate-3 transition-transform duration-500"></div>
             <div className="relative bg-white rounded-[3rem] overflow-hidden shadow-xl">
               <div className="aspect-square bg-gradient-to-br from-[var(--color-primary-lighter)] to-white flex items-center justify-center text-[200px]">
-                👩‍⚕️
+                
               </div>
             </div>
             <div className="absolute -bottom-6 -left-6 bg-white rounded-2xl p-5 shadow-xl backdrop-blur-sm z-10">

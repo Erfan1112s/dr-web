@@ -35,7 +35,7 @@ export default function AppointmentPage() {
     setLoadingTimes(true);
     setError('');
     try {
-      // ✅ مسیر درست: /api/appointments با پارامتر day
+      
       const res = await fetch(`/api/appointments?day=${encodeURIComponent(day)}`);
       const data = await res.json();
       if (res.ok) {
@@ -73,7 +73,7 @@ export default function AppointmentPage() {
 
     try {
       const userId = session?.user?.id || null;
-      // ✅ مسیر درست: /api/appointments
+      
       const response = await fetch('/api/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -165,7 +165,7 @@ export default function AppointmentPage() {
                 ))}
               </div>
               <p className="text-sm text-[var(--color-text-light)] mt-6 text-center">
-                ⚠️ نوبت‌دهی فقط ۱ تا ۲ روز جلوتر انجام می‌شود
+                 نوبت‌دهی فقط ۱ تا ۲ روز جلوتر انجام می‌شود
               </p>
             </div>
           )}
@@ -215,7 +215,7 @@ export default function AppointmentPage() {
                 </div>
               )}
               <p className="text-sm text-[var(--color-text-light)] mt-6 text-center">
-                🕒 ساعت کاری: ۴:۳۰ تا ۸:۳۰ شب
+                 ساعت کاری: ۴:۳۰ تا ۸:۳۰ شب
               </p>
             </div>
           )}

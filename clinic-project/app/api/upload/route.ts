@@ -14,31 +14,29 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData();
     const file = formData.get('file') as File;
+
     if (!file) {
       return NextResponse.json({ error: 'فایلی ارسال نشده' }, { status: 400 });
     }
 
-    // بررسی نوع فایل (فقط PDF)
-    if (file.type !== 'application/pdf') {
-      return NextResponse.json({ error: 'فایل باید PDF باشد' }, { status: 400 });
+    // بررسی نوع فایل (فقط تصاویر)
+    if (!file.type.startsWith('image/')) {
+      return NextResponse.json({ error: 'فایل باید تصویر باشد' }, { status: 400 });
     }
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // ایجاد نام یکتا
     const timestamp = Date.now();
     const originalName = file.name.replace(/\s/g, '_');
     const filename = `${timestamp}-${originalName}`;
     const uploadDir = path.join(process.cwd(), 'public/uploads/articles');
-    
-    // اطمینان از وجود پوشه
+
     await mkdir(uploadDir, { recursive: true });
 
     const filepath = path.join(uploadDir, filename);
     await writeFile(filepath, buffer);
 
-    // URL نسبی برای دسترسی
     const fileUrl = `/uploads/articles/${filename}`;
 
     return NextResponse.json({ url: fileUrl });

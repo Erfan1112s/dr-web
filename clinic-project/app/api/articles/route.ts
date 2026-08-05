@@ -8,12 +8,22 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const category = searchParams.get('category');
+    const search = searchParams.get('search');
     const limit = parseInt(searchParams.get('limit') || '10');
     const page = parseInt(searchParams.get('page') || '1');
     const skip = (page - 1) * limit;
 
     const where: any = {};
     if (category) where.category = category;
+    
+    
+    if (search && search.trim()) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { summary: { contains: search, mode: 'insensitive' } },
+        { content: { contains: search, mode: 'insensitive' } },
+      ];
+    }
 
     const [articles, total] = await Promise.all([
       prisma.article.findMany({
@@ -30,10 +40,9 @@ export async function GET(req: NextRequest) {
           category: true,
           views: true,
           publishedAt: true,
-          pdfUrl: true,
-          _count: {
-            select: { comments: true },
-          },
+          content: true,
+          author: true,
+          tags: true,
         },
       }),
       prisma.article.count({ where }),
@@ -48,6 +57,8 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+// POST: ...
 
 export async function POST(req: NextRequest) {
   try {

@@ -122,7 +122,7 @@ export default function AdminDashboard() {
           <div className="flex justify-between items-center flex-wrap gap-4">
             <div>
               <h1 className="text-2xl font-bold flex items-center gap-2">
-                👨‍💼 پنل مدیریت
+                 پنل مدیریت
               </h1>
               <p className="text-[var(--color-text-light)] text-sm">
                 {session?.user?.name} عزیز خوش آمدید
@@ -172,7 +172,7 @@ export default function AdminDashboard() {
                 : 'bg-white text-[var(--color-text-dark)] hover:bg-gray-50'
             }`}
           >
-            📋 نوبت‌ها
+             نوبت‌ها
           </button>
           <button
             onClick={() => setActiveTab('users')}
@@ -182,7 +182,7 @@ export default function AdminDashboard() {
                 : 'bg-white text-[var(--color-text-dark)] hover:bg-gray-50'
             }`}
           >
-            👤 کاربران
+             کاربران
           </button>
         </div>
 
@@ -196,7 +196,7 @@ export default function AdminDashboard() {
               </h2>
               {appointments.length === 0 ? (
                 <div className="text-center py-12 text-[var(--color-text-light)]">
-                  <div className="text-6xl mb-4">📅</div>
+                  <div className="text-6xl mb-4"></div>
                   <p>هیچ نوبتی ثبت نشده است</p>
                 </div>
               ) : (

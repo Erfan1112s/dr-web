@@ -57,8 +57,9 @@ export async function GET() {
       { error: 'خطا در دریافت پیام‌ها' },
       { status: 500 }
     );
-  }
+  }ف
 }
+
 
 export async function PUT(req: NextRequest) {
   try {

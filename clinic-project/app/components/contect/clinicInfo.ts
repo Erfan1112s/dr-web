@@ -12,7 +12,7 @@ export const clinicInfo = {
   hospitals: ["بیمارستان امیرالمؤمنین", "بیمارستان ابن‌مریم"],
 };
 
-// ✅ خدمات با محتوای بهبودیافته
+
 export const services = [
   {
     id: "mamai",
