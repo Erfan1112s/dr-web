@@ -1,48 +1,102 @@
-// app/api/appointment/route.ts
+// app/api/appointments/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { sendAppointmentSMS } from '@/lib/sms';
+import { sendAppointmentSMS, sendAdminNotification } from '@/lib/sms';
+import { toJalaliDateForSMS } from '@/lib/date-utils';
+
 // ============================================================
-// GET: دریافت ساعت‌های آزاد یک روز خاص
+// GET: دریافت ساعت‌های آزاد یا نوبت‌های کاربر
 // ============================================================
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const day = searchParams.get('day');
+    const date = searchParams.get('date');
+    const userId = searchParams.get('userId');
 
-    if (!day) {
-      return NextResponse.json(
-        { error: 'روز را مشخص کنید' },
-        { status: 400 }
-      );
+    // اگر userId وجود داشت، نوبت‌های کاربر را برگردان
+    if (userId) {
+      console.log(`📋 دریافت نوبت‌های کاربر ${userId}`);
+      const appointments = await prisma.appointment.findMany({
+        where: { userId: parseInt(userId) },
+        orderBy: { date: 'desc' },
+      });
+      return NextResponse.json(appointments);
     }
 
-    // دریافت نوبت‌های ثبت‌شده برای آن روز
+    // اگر day و date وجود داشت، ساعت‌های آزاد آن روز را محاسبه کن
+    if (day && date) {
+      console.log(`📅 دریافت درخواست برای روز: ${day}, تاریخ: ${date}`);
+
+      // ✅ بررسی اعتبار تاریخ
+      let dateObj: Date;
+      try {
+        dateObj = new Date(date);
+        if (isNaN(dateObj.getTime())) {
+          console.error('❌ تاریخ نامعتبر:', date);
+          return NextResponse.json(
+            { error: 'تاریخ نامعتبر است' },
+            { status: 400 }
+          );
+        }
+      } catch (err) {
+        console.error('❌ خطا در parse تاریخ:', err);
+        return NextResponse.json(
+          { error: 'تاریخ نامعتبر است' },
+          { status: 400 }
+        );
+      }
+
+      // بازه زمانی روز مورد نظر
+      const start = new Date(dateObj);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(dateObj);
+      end.setHours(23, 59, 59, 999);
+
+      console.log(`📅 بازه جستجو: ${start.toISOString()} تا ${end.toISOString()}`);
+
+      // ✅ بررسی وجود جدول و فیلد date
+      let appointments;
+      try {
+        appointments = await prisma.appointment.findMany({
+          where: {
+            date: {
+              gte: start,
+              lt: end,
+            },
+          },
+          select: { time: true },
+        });
+      } catch (dbError) {
+        console.error('❌ خطا در کوئری دیتابیس:', dbError);
+        return NextResponse.json(
+          { error: 'خطا در ارتباط با دیتابیس' },
+          { status: 500 }
+        );
+      }
+
+      console.log(`📋 نوبت‌های موجود:`, appointments.map(a => a.time));
+
+      const bookedTimes = appointments.map((a) => a.time);
+      const allTimes = ['۴:۳۰', '۵:۰۰', '۵:۳۰', '۶:۰۰', '۶:۳۰', '۷:۰۰', '۷:۳۰', '۸:۰۰', '۸:۳۰'];
+      const availableTimes = allTimes.filter((t) => !bookedTimes.includes(t));
+
+      console.log(`✅ ساعت‌های آزاد:`, availableTimes);
+
+      return NextResponse.json({
+        available: availableTimes,
+        booked: bookedTimes,
+      });
+    }
+
+    // اگر هیچ پارامتری نبود، همه نوبت‌ها را برگردان (برای ادمین)
+    console.log('📋 دریافت همه نوبت‌ها (برای ادمین)');
     const appointments = await prisma.appointment.findMany({
-      where: { day },
-      select: { time: true },
+      orderBy: { date: 'desc' },
     });
-
-    const bookedTimes = appointments.map((a) => a.time);
-    const allTimes = [
-      '۴:۳۰',
-      '۵:۰۰',
-      '۵:۳۰',
-      '۶:۰۰',
-      '۶:۳۰',
-      '۷:۰۰',
-      '۷:۳۰',
-      '۸:۰۰',
-      '۸:۳۰',
-    ];
-    const availableTimes = allTimes.filter((t) => !bookedTimes.includes(t));
-
-    return NextResponse.json({
-      available: availableTimes,
-      booked: bookedTimes,
-    });
+    return NextResponse.json(appointments);
   } catch (error) {
-    console.error('❌ خطا در دریافت ساعت‌های آزاد:', error);
+    console.error('❌ خطا در GET /api/appointments:', error);
     return NextResponse.json(
       { error: 'خطا در دریافت اطلاعات' },
       { status: 500 }
@@ -56,19 +110,49 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { day, time, name, phone, description, userId } = body;
+    const { day, date, jalaliDate, time, name, phone, description, userId } = body;
 
-    // اعتبارسنجی ورودی‌ها
-    if (!day || !time || !name || !phone) {
+    // اعتبارسنجی
+    if (!day || !date || !time || !name || !phone) {
       return NextResponse.json(
         { error: 'تمام فیلدهای اجباری را پر کنید' },
         { status: 400 }
       );
     }
 
+    let dateObj: Date;
+    try {
+      dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) {
+        console.error('❌ تاریخ نامعتبر:', date);
+        return NextResponse.json(
+          { error: 'تاریخ نامعتبر است' },
+          { status: 400 }
+        );
+      }
+    } catch (err) {
+      console.error('❌ خطا در parse تاریخ:', err);
+      return NextResponse.json(
+        { error: 'تاریخ نامعتبر است' },
+        { status: 400 }
+      );
+    }
+
+    // بازه زمانی روز مورد نظر
+    const start = new Date(dateObj);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(dateObj);
+    end.setHours(23, 59, 59, 999);
+
     // بررسی تکراری نبودن نوبت
     const existing = await prisma.appointment.findFirst({
-      where: { day, time },
+      where: {
+        date: {
+          gte: start,
+          lt: end,
+        },
+        time,
+      },
     });
 
     if (existing) {
@@ -78,12 +162,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ذخیره نوبت در دیتابیس
+    // ذخیره در دیتابیس
     const appointment = await prisma.appointment.create({
       data: {
         patientName: name,
         patientPhone: phone,
         day,
+        date: dateObj,
         time,
         description: description || '',
         status: 'pending',
@@ -93,59 +178,40 @@ export async function POST(req: NextRequest) {
 
     console.log('✅ نوبت جدید ثبت شد:', appointment);
 
-    // ============================================================
     // ارسال پیامک به بیمار
-    // ============================================================
     let smsSent = false;
-    let smsError = null;
-
     try {
-      console.log(` تلاش برای ارسال پیامک به ${phone}...`);
-      const smsResult = await sendAppointmentSMS(phone, name, day, time);
-      console.log('نتیجه ارسال پیامک:', smsResult);
-
+      const jalaliDateStr = jalaliDate || toJalaliDateForSMS(dateObj);
+      console.log(`📤 تلاش برای ارسال پیامک به ${phone}...`);
+      const smsResult = await sendAppointmentSMS(phone, name, jalaliDateStr, day, time);
       if (smsResult.success) {
         smsSent = true;
-        // به‌روزرسانی وضعیت smsSent در دیتابیس
         await prisma.appointment.update({
           where: { id: appointment.id },
           data: { smsSent: true },
         });
-        console.log('✅ پیامک با موفقیت ارسال شد و وضعیت به‌روز شد');
+        console.log('✅ پیامک با موفقیت ارسال شد');
       } else {
-        smsError = smsResult.error;
-        console.error('❌ خطا در ارسال پیامک به بیمار:', smsError);
+        console.error('❌ خطا در ارسال پیامک:', smsResult.error);
       }
     } catch (error) {
       console.error('❌ خطای غیرمنتظره در ارسال پیامک:', error);
-      smsError = 'خطا در ارسال پیامک';
     }
 
-    // ============================================================
-    // ارسال پیامک به ادمین (اختیاری - در صورت نیاز)
-    // ============================================================
+    // ارسال پیامک به ادمین
     try {
       await sendAdminNotification(name, phone, day, time);
-      console.log('✅ پیامک ادمین ارسال شد (در صورت تنظیم)');
     } catch (adminError) {
       console.error('❌ خطا در ارسال پیامک به ادمین:', adminError);
-      // این خطا نباید پاسخ نهایی را مختل کند
     }
 
-    // ============================================================
-    // پاسخ نهایی به کاربر
-    // ============================================================
     return NextResponse.json({
       success: true,
       appointmentId: appointment.id,
-      smsSent: smsSent,
-      smsError: smsError,
-      message: smsSent
-        ? 'نوبت با موفقیت ثبت شد. پیامک تأیید برای شما ارسال شد.'
-        : 'نوبت با موفقیت ثبت شد، اما ارسال پیامک با مشکل مواجه شد. لطفاً با مطب تماس بگیرید.',
+      smsSent,
     });
   } catch (error) {
-    console.error('❌ خطا در ثبت نوبت:', error);
+    console.error('❌ خطا در POST /api/appointments:', error);
     return NextResponse.json(
       { error: 'خطا در ثبت نوبت. لطفاً دوباره تلاش کنید.' },
       { status: 500 }
@@ -154,12 +220,12 @@ export async function POST(req: NextRequest) {
 }
 
 // ============================================================
-// PUT: به‌روزرسانی وضعیت یا اطلاعات نوبت
+// PUT: به‌روزرسانی نوبت
 // ============================================================
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, status, patientName, patientPhone, day, time, description } = body;
+    const { id, status, patientName, patientPhone, day, date, time, description } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -173,6 +239,12 @@ export async function PUT(req: NextRequest) {
     if (patientName) data.patientName = patientName;
     if (patientPhone) data.patientPhone = patientPhone;
     if (day) data.day = day;
+    if (date) {
+      const dateObj = new Date(date);
+      if (!isNaN(dateObj.getTime())) {
+        data.date = dateObj;
+      }
+    }
     if (time) data.time = time;
     if (description !== undefined) data.description = description;
 
@@ -183,7 +255,7 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json(appointment);
   } catch (error) {
-    console.error('❌ خطا در به‌روزرسانی نوبت:', error);
+    console.error('❌ خطا در PUT /api/appointments:', error);
     return NextResponse.json(
       { error: 'خطا در به‌روزرسانی نوبت' },
       { status: 500 }
@@ -212,7 +284,7 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ success: true, message: 'نوبت با موفقیت حذف شد' });
   } catch (error) {
-    console.error('❌ خطا در حذف نوبت:', error);
+    console.error('❌ خطا در DELETE /api/appointments:', error);
     return NextResponse.json(
       { error: 'خطا در حذف نوبت' },
       { status: 500 }

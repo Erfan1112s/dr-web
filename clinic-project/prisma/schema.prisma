@@ -27,11 +27,12 @@ model Appointment {
   id          Int      @id @default(autoincrement())
   patientName String   @map("patient_name")
   patientPhone String  @map("patient_phone")
-  day         String
+  day         String   // روز هفته (یکشنبه، سه‌شنبه)
+  date        DateTime // تاریخ دقیق نوبت (میلادی)
   time        String
   description String?
   status      String   @default("pending")
-  userId      Int?     @map("user_id")   // ← این فیلد باید باشد
+  userId      Int?     @map("user_id")
   createdAt   DateTime @default(now()) @map("created_at")
   smsSent     Boolean  @default(false) @map("sms_sent")
 
@@ -39,6 +40,7 @@ model Appointment {
 
   @@map("appointments")
 }
+
 model ChatMessage {
   id          Int      @id @default(autoincrement())
   sessionId   String   @map("session_id")
