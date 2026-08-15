@@ -64,33 +64,38 @@ export function getTodayJalali(): string {
 // ============================================================
 // دریافت تاریخ شمسی برای روز هفته آینده (یکشنبه یا سه‌شنبه)
 // ============================================================
+// lib/date-utils.ts
 export function getNextJalaliDateForDay(day: string): string {
   const now = new Date();
+  // نقشه روزهای هفته بر اساس getDay()
+  // 0=یکشنبه, 1=دوشنبه, 2=سه‌شنبه, 3=چهارشنبه, 4=پنجشنبه, 5=جمعه, 6=شنبه
   const dayMap: Record<string, number> = {
-    'یکشنبه': 1,
-    'سه‌شنبه': 3,
+    'یکشنبه': 0,
+    'سه‌شنبه': 2,
   };
-  const targetDay = dayMap[day];
-  const currentDay = now.getDay(); // 0=شنبه
   
+  const targetDay = dayMap[day];
+  if (targetDay === undefined) {
+    console.error('❌ روز نامعتبر:', day);
+    return 'تاریخ نامعتبر';
+  }
+  
+  const currentDay = now.getDay();
   let diff = targetDay - currentDay;
-  if (diff <= 0) diff += 7;
+  if (diff < 0) diff += 7;
   
   const date = new Date(now);
   date.setDate(now.getDate() + diff);
   
-  // اگر امروز یکشنبه یا سه‌شنبه باشد و زمان فعلی بعد از ۸:۳۰ شب باشد، یک هفته بعد
+  // اگر امروز یکشنبه یا سه‌شنبه باشد و ساعت از ۸:۳۰ شب گذشته، یک هفته بعد
   const hour = now.getHours();
   const minute = now.getMinutes();
   if (diff === 0 && (hour > 20 || (hour === 20 && minute >= 30))) {
     date.setDate(date.getDate() + 7);
   }
   
-  const result = toJalaliDate(date);
-  console.log(`📅 تاریخ شمسی برای ${day}: ${result}`);
-  return result;
+  return toJalaliDate(date);
 }
-
 // ============================================================
 // بررسی اینکه آیا تاریخ گذشته است یا نه
 // ============================================================

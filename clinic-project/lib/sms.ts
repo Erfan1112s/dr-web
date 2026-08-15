@@ -43,6 +43,7 @@ function normalizePhone(phone: string): string {
 export async function sendAppointmentSMS(
   phone: string,
   name: string,
+  date:string,
   day: string,
   time: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
