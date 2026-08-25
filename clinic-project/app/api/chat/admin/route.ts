@@ -46,18 +46,25 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({
-      total: messages.length,
-      groups: groupedMessages,
-      messages,
-    });
+return NextResponse.json(
+  {
+    total: messages.length,
+    groups: groupedMessages,
+    messages,
+  },
+  {
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+    },
+  }
+);
   } catch (error) {
     console.error('❌ Error fetching chat messages for admin:', error);
     return NextResponse.json(
       { error: 'خطا در دریافت پیام‌ها' },
       { status: 500 }
     );
-  }ف
+  }
 }
 
 

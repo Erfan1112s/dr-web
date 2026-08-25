@@ -59,7 +59,6 @@ type ChatMessage = {
   botDisabled?: boolean;
   isRead: boolean;
   createdAt: string;
-  updatedAt: string;
   user?: { name: string; phone: string };
 };
 
@@ -141,7 +140,7 @@ export default function AdminDashboard() {
   });
 
   // ============================================================
-  // useEffect
+  // useEffect: احراز هویت
   // ============================================================
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -154,18 +153,18 @@ export default function AdminDashboard() {
   }, [status, session]);
 
   // ============================================================
-  // توابع دریافت داده
+  // دریافت همه داده‌ها (برای بار اول یا رفرش کامل)
   // ============================================================
   const fetchAllData = async () => {
     setLoading(true);
     setError('');
     try {
       const [appRes, userRes, chatRes, articleRes, commentRes] = await Promise.all([
-        fetch('/api/appointments'),
-        fetch('/api/users'),
-        fetch('/api/chat/admin'),
-        fetch('/api/articles?limit=100'),
-        fetch('/api/comments/admin'),
+        fetch('/api/appointments', { cache: 'no-store' }),
+        fetch('/api/users', { cache: 'no-store' }),
+        fetch('/api/chat/admin', { cache: 'no-store' }),
+        fetch('/api/articles?limit=100', { cache: 'no-store' }),
+        fetch('/api/comments/admin', { cache: 'no-store' }),
       ]);
 
       const appData = appRes.ok ? await appRes.json() : [];
@@ -224,6 +223,68 @@ export default function AdminDashboard() {
   };
 
   // ============================================================
+  // دریافت فقط چت‌ها (سبک‌تر برای پولینگ)
+  // ============================================================
+  const fetchChatGroupsOnly = async () => {
+    try {
+      const res = await fetch('/api/chat/admin', { cache: 'no-store' });
+      if (!res.ok) return;
+
+      const chatData = await res.json();
+      if (!chatData.groups) return;
+
+      const groups: ChatGroup[] = (Array.isArray(chatData.groups) ? chatData.groups : []).map(
+        (group: any) => {
+          const msgs = Array.isArray(group.messages) ? group.messages : [];
+          const lastMsg = msgs[0] || {};
+          const user = lastMsg.user;
+
+          return {
+            sessionId: group.sessionId,
+            userId: group.userId ?? user?.id,
+            userName: group.userName || user?.name || 'کاربر مهمان',
+            userPhone: group.userPhone || user?.phone || '-',
+            messages: msgs,
+            lastMessage: group.lastMessage || lastMsg.userMsg || '',
+            createdAt: group.createdAt || lastMsg.createdAt || new Date().toISOString(),
+            isRead: group.isRead ?? msgs.some((m: any) => !m.isRead),
+            hasAdminReply: msgs.some((m: any) => m.adminReply !== null && m.adminReply !== ''),
+            botDisabled: msgs.some((m: any) => m.botDisabled === true),
+          };
+        }
+      );
+
+      setChatGroups(groups);
+
+      // اگر مکالمه‌ای باز است، آن را هم آپدیت کن
+      setSelectedChat((prev) => {
+        if (!prev) return prev;
+        const updated = groups.find((g) => g.sessionId === prev.sessionId);
+        return updated || prev;
+      });
+    } catch (error) {
+      console.error('❌ Error updating chats:', error);
+    }
+  };
+
+  // ============================================================
+  // پولینگ هوشمند فقط وقتی تب چت فعال است
+  // ============================================================
+  useEffect(() => {
+    if (activeTab !== 'chats') return;
+
+    // یک‌بار فوری
+    fetchChatGroupsOnly();
+
+    // هر ۱۲ ثانیه یک‌بار
+    const intervalId = setInterval(() => {
+      fetchChatGroupsOnly();
+    }, 12000);
+
+    return () => clearInterval(intervalId);
+  }, [activeTab]);
+
+  // ============================================================
   // توابع مدیریت نوبت‌ها
   // ============================================================
   const updateAppointmentStatus = async (id: number, status: string) => {
@@ -232,6 +293,7 @@ export default function AdminDashboard() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status }),
+        cache: 'no-store',
       });
       if (res.ok) {
         setAppointments((prev) =>
@@ -248,7 +310,10 @@ export default function AdminDashboard() {
   const deleteAppointment = async (id: number) => {
     if (!confirm('آیا از حذف این نوبت اطمینان دارید؟')) return;
     try {
-      const res = await fetch(`/api/appointments?id=${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/appointments?id=${id}`, {
+        method: 'DELETE',
+        cache: 'no-store',
+      });
       if (res.ok) {
         setAppointments((prev) => prev.filter((a) => a.id !== id));
         fetchAllData();
@@ -265,7 +330,10 @@ export default function AdminDashboard() {
   const deleteArticle = async (id: number) => {
     if (!confirm('آیا از حذف این مقاله اطمینان دارید؟')) return;
     try {
-      const res = await fetch(`/api/articles/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/articles/${id}`, {
+        method: 'DELETE',
+        cache: 'no-store',
+      });
       if (res.ok) {
         setArticles((prev) => prev.filter((a) => a.id !== id));
       }
@@ -284,6 +352,7 @@ export default function AdminDashboard() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, isApproved: true }),
+        cache: 'no-store',
       });
       if (res.ok) {
         setComments((prev) =>
@@ -299,7 +368,10 @@ export default function AdminDashboard() {
   const deleteComment = async (id: number) => {
     if (!confirm('آیا از حذف این نظر اطمینان دارید؟')) return;
     try {
-      const res = await fetch(`/api/comments/admin?id=${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/comments/admin?id=${id}`, {
+        method: 'DELETE',
+        cache: 'no-store',
+      });
       if (res.ok) {
         setComments((prev) => prev.filter((c) => c.id !== id));
       }
@@ -318,6 +390,7 @@ export default function AdminDashboard() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, adminReply: reply, isApproved: true }),
+        cache: 'no-store',
       });
       if (res.ok) {
         setComments((prev) =>
@@ -350,13 +423,16 @@ export default function AdminDashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId }),
+        cache: 'no-store',
       });
 
       if (res.ok) {
         alert(`✅ ربات با موفقیت ${action} شد`);
         fetchAllData();
         if (selectedChat && selectedChat.sessionId === sessionId) {
-          setSelectedChat((prev) => prev ? { ...prev, botDisabled: !enable } : null);
+          setSelectedChat((prev) =>
+            prev ? { ...prev, botDisabled: !enable } : null
+          );
         }
       } else {
         alert(`❌ خطا در ${action}سازی ربات`);
@@ -375,6 +451,7 @@ export default function AdminDashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messageId, reply }),
+        cache: 'no-store',
       });
 
       if (res.ok) {
@@ -382,9 +459,13 @@ export default function AdminDashboard() {
         await fetchAllData();
         // بروزرسانی مکالمه انتخاب‌شده
         if (selectedChat) {
-          const updated = await fetch('/api/chat/admin').then(r => r.json());
+          const updated = await fetch('/api/chat/admin', { cache: 'no-store' }).then(
+            (r) => r.json()
+          );
           const newGroups = updated.groups || [];
-          const updatedGroup = newGroups.find((g: any) => g.sessionId === selectedChat.sessionId);
+          const updatedGroup = newGroups.find(
+            (g: any) => g.sessionId === selectedChat.sessionId
+          );
           if (updatedGroup) {
             setSelectedChat(updatedGroup);
           }
@@ -444,7 +525,13 @@ export default function AdminDashboard() {
             </div>
             <div className="flex gap-3 flex-wrap">
               <button
-                onClick={fetchAllData}
+                onClick={() => {
+                  if (activeTab === 'chats') {
+                    fetchChatGroupsOnly();
+                  } else {
+                    fetchAllData();
+                  }
+                }}
                 className="flex items-center gap-2 text-[var(--color-primary)] px-4 py-2 bg-[var(--color-primary-lighter)] rounded-full hover:bg-[var(--color-primary)] hover:text-white transition"
               >
                 <RefreshCw size={18} />
@@ -805,7 +892,9 @@ export default function AdminDashboard() {
                             </div>
                             {/* دکمه فعال/غیرفعال‌سازی ربات */}
                             <button
-                              onClick={() => toggleBot(selectedChat.sessionId, selectedChat.botDisabled)}
+                              onClick={() =>
+                                toggleBot(selectedChat.sessionId, selectedChat.botDisabled)
+                              }
                               className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium transition ${
                                 selectedChat.botDisabled
                                   ? 'bg-green-100 text-green-700 hover:bg-green-200'

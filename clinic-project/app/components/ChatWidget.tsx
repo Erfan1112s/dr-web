@@ -63,102 +63,104 @@ export default function ChatWidget() {
   // ============================================================
   // بارگذاری تاریخچه چت (با جلوگیری از تکراری)
   // ============================================================
-  const loadHistory = useCallback(
-    async (currentSessionId = sessionId) => {
-      if (!currentSessionId || isSendingRef.current) return;
+  // components/ChatWidget.tsx (بخش loadHistory)
+const loadHistory = useCallback(
+  async (currentSessionId = sessionId) => {
+    if (!currentSessionId || isSendingRef.current) return;
 
-      try {
-        const res = await fetch(
-          `/api/chat?sessionId=${encodeURIComponent(currentSessionId)}&isAdmin=${isAdmin}`
-        );
+    try {
+      const res = await fetch(
+        `/api/chat?sessionId=${encodeURIComponent(currentSessionId)}&isAdmin=${isAdmin}`,
+        { cache: 'no-store' }   // ✅ جلوگیری از کش مرورگر
+      );
 
-        if (!res.ok) {
-          console.error('❌ خطا در پاسخ API:', res.status);
-          return;
-        }
-
-        const data = await res.json();
-        const newMessages: Message[] = [];
-
-        (data.messages || []).forEach((msg: any) => {
-          const msgId = msg.id || `${msg.userMsg}-${msg.createdAt}`;
-          if (messageIdsRef.current.has(msgId)) return;
-          messageIdsRef.current.set(msgId, true);
-
-          const userTime = new Date(msg.createdAt);
-          const botTime = new Date(msg.createdAt);
-          const adminTime = msg.updatedAt ? new Date(msg.updatedAt) : new Date(msg.createdAt);
-
-          if (isAdmin) {
-            if (msg.userMsg) {
-              newMessages.push({
-                id: `user-${msgId}`,
-                role: 'user',
-                content: msg.userMsg,
-                timestamp: userTime,
-              });
-            }
-            if (msg.adminReply) {
-              newMessages.push({
-                id: `admin-${msgId}`,
-                role: 'admin',
-                content: msg.adminReply,
-                timestamp: adminTime,
-                botDisabled: msg.botDisabled,
-              });
-            }
-          } else {
-            if (msg.userMsg) {
-              newMessages.push({
-                id: `user-${msgId}`,
-                role: 'user',
-                content: msg.userMsg,
-                timestamp: userTime,
-              });
-            }
-            if (msg.botMsg) {
-              newMessages.push({
-                id: `bot-${msgId}`,
-                role: 'bot',
-                content: msg.botMsg,
-                timestamp: botTime,
-                botDisabled: msg.botDisabled,
-              });
-            }
-            if (msg.adminReply) {
-              newMessages.push({
-                id: `admin-${msgId}`,
-                role: 'admin',
-                content: msg.adminReply,
-                timestamp: adminTime,
-                botDisabled: msg.botDisabled,
-              });
-            }
-          }
-        });
-
-        newMessages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-
-        if (newMessages.length > 0) {
-          setMessages((prev) => {
-            const existingIds = new Set(prev.map((m) => m.id));
-            const filtered = newMessages.filter((m) => m.id && !existingIds.has(m.id));
-            return [...prev, ...filtered];
-          });
-        }
-
-        // بررسی وضعیت ربات
-        const lastMsg = data.messages?.[data.messages.length - 1];
-        if (lastMsg) {
-          setBotDisabled(lastMsg.botDisabled === true);
-        }
-      } catch (error) {
-        console.error('❌ Error loading chat history:', error);
+      if (!res.ok) {
+        console.error('❌ خطا در پاسخ API:', res.status);
+        return;
       }
-    },
-    [sessionId, isAdmin]
-  );
 
+      const data = await res.json();
+      const newMessages: Message[] = [];
+
+      (data.messages || []).forEach((msg: any) => {
+        const msgId = msg.id || `${msg.userMsg}-${msg.createdAt}`;
+        if (messageIdsRef.current.has(msgId)) return;
+        messageIdsRef.current.set(msgId, true);
+
+        const userTime = new Date(msg.createdAt);
+        const botTime = new Date(msg.createdAt);
+        // ✅ به جای updatedAt از createdAt استفاده کنید (چون updatedAt در دیتابیس نیست)
+        const adminTime = new Date(msg.createdAt);
+
+        if (isAdmin) {
+          if (msg.userMsg) {
+            newMessages.push({
+              id: `user-${msgId}`,
+              role: 'user',
+              content: msg.userMsg,
+              timestamp: userTime,
+            });
+          }
+          if (msg.adminReply) {
+            newMessages.push({
+              id: `admin-${msgId}`,
+              role: 'admin',
+              content: msg.adminReply,
+              timestamp: adminTime,
+              botDisabled: msg.botDisabled,
+            });
+          }
+        } else {
+          if (msg.userMsg) {
+            newMessages.push({
+              id: `user-${msgId}`,
+              role: 'user',
+              content: msg.userMsg,
+              timestamp: userTime,
+            });
+          }
+          if (msg.botMsg) {
+            newMessages.push({
+              id: `bot-${msgId}`,
+              role: 'bot',
+              content: msg.botMsg,
+              timestamp: botTime,
+              botDisabled: msg.botDisabled,
+            });
+          }
+          if (msg.adminReply) {
+            newMessages.push({
+              id: `admin-${msgId}`,
+              role: 'admin',
+              content: msg.adminReply,
+              timestamp: adminTime,
+              botDisabled: msg.botDisabled,
+            });
+          }
+        }
+      });
+
+      newMessages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+      if (newMessages.length > 0) {
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const filtered = newMessages.filter((m) => m.id && !existingIds.has(m.id));
+          return [...prev, ...filtered];
+        });
+      }
+
+      // بررسی وضعیت ربات
+      const lastMsg = data.messages?.[data.messages.length - 1];
+      if (lastMsg) {
+        setBotDisabled(lastMsg.botDisabled === true);
+      }
+    } catch (error) {
+      console.error('❌ Error loading chat history:', error);
+    }
+  },
+  [sessionId, isAdmin]
+);
   // ============================================================
   // بارگذاری تاریخچه هنگام باز شدن چت و هر ۵ ثانیه
   // ============================================================

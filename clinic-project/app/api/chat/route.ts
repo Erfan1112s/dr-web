@@ -4,6 +4,11 @@ import OpenAI from 'openai';
 import { prisma } from '@/lib/prisma';
 
 // ============================================================
+// جلوگیری از کش شدن پاسخ API
+// ============================================================
+export const dynamic = 'force-dynamic';
+
+// ============================================================
 // راه‌اندازی کلاینت Mistral (یا هر سرویس دیگر)
 // ============================================================
 const mistral = new OpenAI({
@@ -12,11 +17,11 @@ const mistral = new OpenAI({
 });
 
 // ============================================================
-// پرامپت سیستم
+// پرامپت سیستم (با نام دکتر زهره بصارت)
 // ============================================================
-const SYSTEM_PROMPT = `تو یک دستیار هوشمند برای مطب تخصصی مامایی خانم فرشته صادقی هستی.
+const SYSTEM_PROMPT = `تو یک دستیار هوشمند برای مطب تخصصی مامایی خانم زهره بصارت هستی.
 اطلاعات مطب:
-- نام: فرشته صادقی
+- نام: زهره بصارت
 - تخصص: کارشناس مامایی
 - شماره نظام پزشکی: ۳۲۳۲۴
 - تلفن: ۰۳۱۳۲۶۷۱۰۵۵
@@ -31,7 +36,7 @@ const SYSTEM_PROMPT = `تو یک دستیار هوشمند برای مطب تخ�
 اگر سوالی خارج از حیطه مامایی بود، با مهربانی بگو که در این زمینه تخصص ندارم.`;
 
 // ============================================================
-// GET: دریافت تاریخچه چت
+// GET: دریافت تاریخچه چت (اصلاح‌شده بدون updatedAt)
 // ============================================================
 export async function GET(req: NextRequest) {
   try {
@@ -46,6 +51,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // ✅ انتخاب فیلدهای درست (بدون updatedAt)
     const messages = await prisma.chatMessage.findMany({
       where: { sessionId },
       orderBy: { createdAt: 'asc' },
@@ -54,29 +60,32 @@ export async function GET(req: NextRequest) {
         userMsg: true,
         botMsg: true,
         adminReply: true,
+        botDisabled: true,   // ✅ اضافه شد
         createdAt: true,
-        updatedAt: true,
+        // updatedAt وجود ندارد در schema
       },
     });
 
-    
-    const messagesWithBotStatus = messages.map((msg) => ({
-      ...msg,
-      botDisabled: false,
-    }));
-
+    // ✅ فیلتر برای ادمین (فقط پیام‌های کاربر و پاسخ ادمین)
     const filteredMessages = isAdmin
-      ? messagesWithBotStatus.map((msg) => ({
+      ? messages.map((msg) => ({
           id: msg.id,
           userMsg: msg.userMsg,
           adminReply: msg.adminReply,
           botDisabled: msg.botDisabled,
           createdAt: msg.createdAt,
-          updatedAt: msg.updatedAt,
         }))
-      : messagesWithBotStatus;
+      : messages;
 
-    return NextResponse.json({ messages: filteredMessages });
+    // ✅ جلوگیری از کش شدن
+    return NextResponse.json(
+      { messages: filteredMessages },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        },
+      }
+    );
   } catch (error) {
     console.error('❌ Error fetching chat history:', error);
     return NextResponse.json(
@@ -154,7 +163,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ============================================================
-    // ۳. بررسی وجود پاسخ ادمین در تاریخچه (اگر قبلاً ادمین پاسخ داده بود)
+    // ۳. بررسی وجود پاسخ ادمین در تاریخچه
     // ============================================================
     const hasAdminReply = await prisma.chatMessage.findFirst({
       where: {
@@ -164,7 +173,6 @@ export async function POST(req: NextRequest) {
     });
 
     if (hasAdminReply) {
-      // اگر قبلاً ادمین پاسخ داده، ربات را غیرفعال کن
       await prisma.chatMessage.updateMany({
         where: { sessionId: currentSessionId },
         data: { botDisabled: true },
@@ -214,7 +222,6 @@ export async function POST(req: NextRequest) {
         completion.choices[0]?.message?.content ||
         'متاسفانه نتوانستم پاسخ را پیدا کنم. لطفاً دوباره تلاش کنید.';
 
-      // ذخیره در دیتابیس
       await prisma.chatMessage.create({
         data: {
           sessionId: currentSessionId,
@@ -231,7 +238,6 @@ export async function POST(req: NextRequest) {
     } catch (aiError: any) {
       console.error('❌ AI API error:', aiError);
 
-      // اگر هوش مصنوعی خطا داد، یک پیام پیش‌فرض برگردان
       const fallbackReply = 'متاسفانه در حال حاضر قادر به پاسخگویی نیستم. لطفاً بعداً تلاش کنید یا با مطب تماس بگیرید.';
 
       await prisma.chatMessage.create({
