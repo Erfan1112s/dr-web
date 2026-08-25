@@ -4,6 +4,11 @@ import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+
+// ============================================================
+// GET: دریافت پیام‌های چت برای ادمین با گروه‌بندی و مرتب‌سازی
+// ============================================================
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -11,6 +16,7 @@ export async function GET() {
       return NextResponse.json({ error: 'دسترسی غیرمجاز' }, { status: 403 });
     }
 
+    // دریافت آخرین ۱۰۰ پیام
     const messages = await prisma.chatMessage.findMany({
       orderBy: { createdAt: 'desc' },
       take: 100,
@@ -21,6 +27,7 @@ export async function GET() {
       },
     });
 
+    // گروه‌بندی بر اساس sessionId
     const groups: Record<string, any[]> = {};
     for (const msg of messages) {
       if (!groups[msg.sessionId]) {
@@ -29,35 +36,44 @@ export async function GET() {
       groups[msg.sessionId].push(msg);
     }
 
+    // مرتب‌سازی و تبدیل به آرایه
     const groupedMessages = Object.keys(groups).map((sessionId) => {
       const msgs = groups[sessionId];
-      const lastMsg = msgs[0] || {};
-      const user = msgs[0]?.user;
+
+      // مرتب‌سازی صعودی داخل هر مکالمه (قدیمی → جدید)
+      msgs.sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+
+      const lastMsg = msgs[msgs.length - 1] || {};
+      const user = lastMsg.user || msgs[0]?.user;
+
       return {
         sessionId,
         userId: user?.id || null,
         userName: user?.name || 'کاربر مهمان',
         userPhone: user?.phone || '-',
-        messages: msgs,
+        messages: msgs, // مرتب از قدیم به جدید
         lastMessage: lastMsg.userMsg || '',
         createdAt: lastMsg.createdAt || new Date().toISOString(),
         isRead: msgs.some((m: any) => m.isRead),
-        hasAdminReply: msgs.some((m: any) => m.adminReply !== null),
+        hasAdminReply: msgs.some((m: any) => m.adminReply !== null && m.adminReply !== ''),
+        botDisabled: msgs.some((m: any) => m.botDisabled === true),
       };
     });
 
-return NextResponse.json(
-  {
-    total: messages.length,
-    groups: groupedMessages,
-    messages,
-  },
-  {
-    headers: {
-      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-    },
-  }
-);
+    return NextResponse.json(
+      {
+        total: messages.length,
+        groups: groupedMessages,
+        messages,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        },
+      }
+    );
   } catch (error) {
     console.error('❌ Error fetching chat messages for admin:', error);
     return NextResponse.json(
@@ -67,7 +83,9 @@ return NextResponse.json(
   }
 }
 
-
+// ============================================================
+// PUT: علامت‌گذاری پیام‌ها به عنوان خوانده شده
+// ============================================================
 export async function PUT(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -77,7 +95,10 @@ export async function PUT(req: NextRequest) {
 
     const { ids } = await req.json();
     if (!ids || !Array.isArray(ids)) {
-      return NextResponse.json({ error: 'آیدی‌های نامعتبر' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'آیدی‌های نامعتبر' },
+        { status: 400 }
+      );
     }
 
     await prisma.chatMessage.updateMany({

@@ -1,4 +1,4 @@
-// components/ChatWidget.tsx (نسخه بهینه‌شده برای موبایل)
+// components/ChatWidget.tsx
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -21,7 +21,7 @@ export default function ChatWidget() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'bot',
-      content: 'سلام 🌸 من مامای هوشمند مطب خانم فرشته صادقی هستم. چطور می‌توانم به شما کمک کنم؟ (ساعت کاری، خدمات، نوبت‌دهی و ...)',
+      content: 'سلام 🌸 من مامای هوشمند مطب خانم زهره بصارت هستم. چطور می‌توانم به شما کمک کنم؟ (ساعت کاری، خدمات، نوبت‌دهی و ...)',
       timestamp: new Date(),
       id: 'welcome-msg',
     },
@@ -61,106 +61,94 @@ export default function ChatWidget() {
   }, [messages]);
 
   // ============================================================
-  // بارگذاری تاریخچه چت (با جلوگیری از تکراری)
+  // بارگذاری تاریخچه چت (با ترتیب صحیح)
   // ============================================================
-  // components/ChatWidget.tsx (بخش loadHistory)
-const loadHistory = useCallback(
-  async (currentSessionId = sessionId) => {
-    if (!currentSessionId || isSendingRef.current) return;
+  const loadHistory = useCallback(
+    async (currentSessionId = sessionId) => {
+      if (!currentSessionId || isSendingRef.current) return;
 
-    try {
-      const res = await fetch(
-        `/api/chat?sessionId=${encodeURIComponent(currentSessionId)}&isAdmin=${isAdmin}`,
-        { cache: 'no-store' }   // ✅ جلوگیری از کش مرورگر
-      );
+      try {
+        const res = await fetch(
+          `/api/chat?sessionId=${encodeURIComponent(currentSessionId)}&isAdmin=${isAdmin}`,
+          { cache: 'no-store' }
+        );
 
-      if (!res.ok) {
-        console.error('❌ خطا در پاسخ API:', res.status);
-        return;
-      }
+        if (!res.ok) {
+          console.error('❌ خطا در پاسخ API:', res.status);
+          return;
+        }
 
-      const data = await res.json();
-      const newMessages: Message[] = [];
+        const data = await res.json();
+        const newMessages: Message[] = [];
 
-      (data.messages || []).forEach((msg: any) => {
-        const msgId = msg.id || `${msg.userMsg}-${msg.createdAt}`;
-        if (messageIdsRef.current.has(msgId)) return;
-        messageIdsRef.current.set(msgId, true);
+        (data.messages || []).forEach((msg: any) => {
+          const baseId = msg.id;
+          if (!baseId) return;
 
-        const userTime = new Date(msg.createdAt);
-        const botTime = new Date(msg.createdAt);
-        // ✅ به جای updatedAt از createdAt استفاده کنید (چون updatedAt در دیتابیس نیست)
-        const adminTime = new Date(msg.createdAt);
+          const baseTime = new Date(msg.createdAt).getTime();
 
-        if (isAdmin) {
-          if (msg.userMsg) {
+          // 1. پیام کاربر (زمان اصلی)
+          const userKey = `user-${baseId}`;
+          if (msg.userMsg && !messageIdsRef.current.has(userKey)) {
+            messageIdsRef.current.set(userKey, true);
             newMessages.push({
-              id: `user-${msgId}`,
+              id: userKey,
               role: 'user',
               content: msg.userMsg,
-              timestamp: userTime,
+              timestamp: new Date(baseTime),
             });
           }
-          if (msg.adminReply) {
+
+          // 2. پاسخ ربات (۱ میلی‌ثانیه بعد)
+          const botKey = `bot-${baseId}`;
+          if (msg.botMsg && !messageIdsRef.current.has(botKey)) {
+            messageIdsRef.current.set(botKey, true);
             newMessages.push({
-              id: `admin-${msgId}`,
-              role: 'admin',
-              content: msg.adminReply,
-              timestamp: adminTime,
-              botDisabled: msg.botDisabled,
-            });
-          }
-        } else {
-          if (msg.userMsg) {
-            newMessages.push({
-              id: `user-${msgId}`,
-              role: 'user',
-              content: msg.userMsg,
-              timestamp: userTime,
-            });
-          }
-          if (msg.botMsg) {
-            newMessages.push({
-              id: `bot-${msgId}`,
+              id: botKey,
               role: 'bot',
               content: msg.botMsg,
-              timestamp: botTime,
+              timestamp: new Date(baseTime + 1),
               botDisabled: msg.botDisabled,
             });
           }
-          if (msg.adminReply) {
+
+          // 3. پاسخ ادمین (۲ میلی‌ثانیه بعد)
+          const adminKey = `admin-${baseId}`;
+          if (msg.adminReply && !messageIdsRef.current.has(adminKey)) {
+            messageIdsRef.current.set(adminKey, true);
             newMessages.push({
-              id: `admin-${msgId}`,
+              id: adminKey,
               role: 'admin',
               content: msg.adminReply,
-              timestamp: adminTime,
+              timestamp: new Date(baseTime + 2),
               botDisabled: msg.botDisabled,
             });
           }
-        }
-      });
-
-      newMessages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-
-      if (newMessages.length > 0) {
-        setMessages((prev) => {
-          const existingIds = new Set(prev.map((m) => m.id));
-          const filtered = newMessages.filter((m) => m.id && !existingIds.has(m.id));
-          return [...prev, ...filtered];
         });
-      }
 
-      // بررسی وضعیت ربات
-      const lastMsg = data.messages?.[data.messages.length - 1];
-      if (lastMsg) {
-        setBotDisabled(lastMsg.botDisabled === true);
+        // مرتب‌سازی نهایی بر اساس زمان
+        newMessages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+        if (newMessages.length > 0) {
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((m) => m.id));
+            const filtered = newMessages.filter((m) => m.id && !existingIds.has(m.id));
+            return [...prev, ...filtered];
+          });
+        }
+
+        // وضعیت ربات
+        const lastMsg = data.messages?.[data.messages.length - 1];
+        if (lastMsg) {
+          setBotDisabled(lastMsg.botDisabled === true);
+        }
+      } catch (error) {
+        console.error('❌ Error loading chat history:', error);
       }
-    } catch (error) {
-      console.error('❌ Error loading chat history:', error);
-    }
-  },
-  [sessionId, isAdmin]
-);
+    },
+    [sessionId, isAdmin]
+  );
+
   // ============================================================
   // بارگذاری تاریخچه هنگام باز شدن چت و هر ۵ ثانیه
   // ============================================================
@@ -271,26 +259,20 @@ const loadHistory = useCallback(
   };
 
   // ============================================================
-  // رندر ویجت چت (بهینه‌شده برای موبایل)
+  // رندر ویجت چت
   // ============================================================
   return (
     <>
-      {/* دکمه شناور - برای موبایل بزرگ‌تر */}
+      {/* دکمه شناور */}
       <button
         onClick={() => setIsOpen(true)}
         className="fixed bottom-6 right-6 z-50 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-white rounded-full p-4 shadow-xl transition-all duration-300 flex items-center justify-center w-14 h-14 md:w-14 md:h-14"
         aria-label="باز کردن چت"
       >
-        <MessageCircle size={28} className="md:size-6" />
-        {/* نشانگر پیام جدید (اختیاری) */}
-        {messages.some(m => m.role === 'bot' && m.id?.toString().includes('temp')) && (
-          <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-xs text-white flex items-center justify-center">
-            1
-          </span>
-        )}
+        <MessageCircle size={28} />
       </button>
 
-      {/* پنجره چت - برای موبایل تقریباً تمام صفحه */}
+      {/* پنجره چت */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -385,8 +367,8 @@ const loadHistory = useCallback(
               <div ref={messagesEndRef} />
             </div>
 
-            {/* ورودی - برای موبایل بزرگ‌تر و قابل‌لمس‌تر */}
-            <div className="border-t p-3 bg-white flex gap-2 flex-shrink-0">
+            {/* ورودی */}
+            <div className="border-t p-3 bg-white flex gap-2">
               <input
                 type="text"
                 value={input}

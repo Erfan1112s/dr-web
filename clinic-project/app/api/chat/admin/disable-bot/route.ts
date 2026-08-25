@@ -1,9 +1,14 @@
-// app/api/chat/admin/enable-bot/route.ts
+// app/api/chat/admin/disable-bot/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+
+// ============================================================
+// POST: غیرفعال‌سازی ربات برای یک session
+// ============================================================
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -20,33 +25,34 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // پیدا کردن آخرین پیام این session
-    const lastMessage = await prisma.chatMessage.findFirst({
+    // بررسی وجود session
+    const message = await prisma.chatMessage.findFirst({
       where: { sessionId },
-      orderBy: { createdAt: 'desc' },
     });
 
-    if (!lastMessage) {
+    if (!message) {
       return NextResponse.json(
         { error: 'هیچ پیامی برای این جلسه یافت نشد' },
         { status: 404 }
       );
     }
 
-    // فعال‌سازی مجدد ربات
-    await prisma.chatMessage.update({
-      where: { id: lastMessage.id },
-      data: { botDisabled: false },
+    // غیرفعال‌سازی ربات برای همه پیام‌های این session
+    await prisma.chatMessage.updateMany({
+      where: { sessionId },
+      data: { botDisabled: true },
     });
+
+    console.log(`✅ ربات برای session ${sessionId} غیرفعال شد`);
 
     return NextResponse.json({
       success: true,
-      message: 'ربات با موفقیت فعال شد',
+      message: 'ربات با موفقیت غیرفعال شد',
     });
   } catch (error) {
-    console.error('❌ Error enabling bot:', error);
+    console.error('❌ Error disabling bot:', error);
     return NextResponse.json(
-      { error: 'خطا در فعال‌سازی ربات' },
+      { error: 'خطا در غیرفعال‌سازی ربات' },
       { status: 500 }
     );
   }
