@@ -4,15 +4,15 @@ import OpenAI from 'openai';
 import { prisma } from '@/lib/prisma';
 
 // ============================================================
-// ۱. راه‌اندازی کلاینت Mistral (OpenAI Compatible)
+// راه‌اندازی کلاینت Mistral (یا هر سرویس دیگر)
 // ============================================================
 const mistral = new OpenAI({
   apiKey: process.env.MISTRAL_API_KEY,
-  baseURL: 'https://api.mistral.ai/v1', // آدرس Mistral
+  baseURL: 'https://api.mistral.ai/v1',
 });
 
 // ============================================================
-// ۲. پرامپت سیستم
+// پرامپت سیستم
 // ============================================================
 const SYSTEM_PROMPT = `تو یک دستیار هوشمند برای مطب تخصصی مامایی خانم فرشته صادقی هستی.
 اطلاعات مطب:
@@ -31,7 +31,7 @@ const SYSTEM_PROMPT = `تو یک دستیار هوشمند برای مطب تخ�
 اگر سوالی خارج از حیطه مامایی بود، با مهربانی بگو که در این زمینه تخصص ندارم.`;
 
 // ============================================================
-// ۳. GET: دریافت تاریخچه چت
+// GET: دریافت تاریخچه چت
 // ============================================================
 export async function GET(req: NextRequest) {
   try {
@@ -55,17 +55,26 @@ export async function GET(req: NextRequest) {
         botMsg: true,
         adminReply: true,
         createdAt: true,
+        updatedAt: true,
       },
     });
 
+    
+    const messagesWithBotStatus = messages.map((msg) => ({
+      ...msg,
+      botDisabled: false,
+    }));
+
     const filteredMessages = isAdmin
-      ? messages.map((msg) => ({
+      ? messagesWithBotStatus.map((msg) => ({
           id: msg.id,
           userMsg: msg.userMsg,
           adminReply: msg.adminReply,
+          botDisabled: msg.botDisabled,
           createdAt: msg.createdAt,
+          updatedAt: msg.updatedAt,
         }))
-      : messages;
+      : messagesWithBotStatus;
 
     return NextResponse.json({ messages: filteredMessages });
   } catch (error) {
@@ -78,7 +87,7 @@ export async function GET(req: NextRequest) {
 }
 
 // ============================================================
-// ۴. POST: ارسال پیام و دریافت پاسخ از Mistral
+// POST: ارسال پیام و دریافت پاسخ
 // ============================================================
 export async function POST(req: NextRequest) {
   try {
@@ -91,7 +100,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ادمین فقط می‌تواند پاسخ بنویسد (ربات پاسخ نمی‌دهد)
+    // اگر کاربر ادمین است، ربات پاسخ نمی‌دهد
     if (isAdmin) {
       return NextResponse.json({
         reply: 'شما به عنوان ادمین وارد شده‌اید. لطفاً پاسخ خود را مستقیماً بنویسید.',
@@ -99,11 +108,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // بررسی وجود پاسخ ادمین قبلی
+    const currentSessionId = sessionId || 'guest-session';
+
+    // ============================================================
+    // ۱. بررسی وجود پاسخ ادمین قبلی برای این پیام
+    // ============================================================
     const existingMessage = await prisma.chatMessage.findFirst({
       where: {
         userMsg: message,
-        sessionId: sessionId || 'guest-session',
+        sessionId: currentSessionId,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -113,7 +126,70 @@ export async function POST(req: NextRequest) {
     }
 
     // ============================================================
-    // ساخت پیام‌ها برای Mistral
+    // ۲. بررسی اینکه ربات برای این session غیرفعال شده است یا نه
+    // ============================================================
+    const lastMessage = await prisma.chatMessage.findFirst({
+      where: { sessionId: currentSessionId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (lastMessage?.botDisabled) {
+      // ذخیره پیام کاربر اما بدون پاسخ ربات
+      await prisma.chatMessage.create({
+        data: {
+          sessionId: currentSessionId,
+          userId: userId ? parseInt(userId) : null,
+          userMsg: message,
+          botMsg: 'پیام شما دریافت شد. کارشناس مطب در حال بررسی است و به زودی پاسخ می‌دهد.',
+          adminReply: null,
+          botDisabled: true,
+          isRead: false,
+        },
+      });
+
+      return NextResponse.json({
+        reply: 'پیام شما دریافت شد. کارشناس مطب در حال بررسی است و به زودی پاسخ می‌دهد.',
+        botDisabled: true,
+      });
+    }
+
+    // ============================================================
+    // ۳. بررسی وجود پاسخ ادمین در تاریخچه (اگر قبلاً ادمین پاسخ داده بود)
+    // ============================================================
+    const hasAdminReply = await prisma.chatMessage.findFirst({
+      where: {
+        sessionId: currentSessionId,
+        adminReply: { not: null },
+      },
+    });
+
+    if (hasAdminReply) {
+      // اگر قبلاً ادمین پاسخ داده، ربات را غیرفعال کن
+      await prisma.chatMessage.updateMany({
+        where: { sessionId: currentSessionId },
+        data: { botDisabled: true },
+      });
+
+      await prisma.chatMessage.create({
+        data: {
+          sessionId: currentSessionId,
+          userId: userId ? parseInt(userId) : null,
+          userMsg: message,
+          botMsg: 'پیام شما دریافت شد. کارشناس مطب در حال بررسی است و به زودی پاسخ می‌دهد.',
+          adminReply: null,
+          botDisabled: true,
+          isRead: false,
+        },
+      });
+
+      return NextResponse.json({
+        reply: 'پیام شما دریافت شد. کارشناس مطب در حال بررسی است و به زودی پاسخ می‌دهد.',
+        botDisabled: true,
+      });
+    }
+
+    // ============================================================
+    // ۴. دریافت پاسخ از هوش مصنوعی
     // ============================================================
     const messages = [
       { role: 'system', content: SYSTEM_PROMPT },
@@ -124,9 +200,6 @@ export async function POST(req: NextRequest) {
       { role: 'user', content: message },
     ];
 
-    // مدل‌های رایگان Mistral:
-    // - 'mistral-tiny' (سریع‌ترین و سبک‌ترین)
-    // - 'mistral-small' (کیفیت بهتر، کمی کندتر)
     const model = 'mistral-small';
 
     try {
@@ -144,48 +217,39 @@ export async function POST(req: NextRequest) {
       // ذخیره در دیتابیس
       await prisma.chatMessage.create({
         data: {
-          sessionId: sessionId || 'guest-session',
+          sessionId: currentSessionId,
           userId: userId ? parseInt(userId) : null,
           userMsg: message,
           botMsg: reply,
           adminReply: null,
+          botDisabled: false,
           isRead: false,
         },
       });
 
       return NextResponse.json({ reply });
-    } catch (mistralError: any) {
-      console.error('❌ Mistral API error:', mistralError);
+    } catch (aiError: any) {
+      console.error('❌ AI API error:', aiError);
 
-      // مدیریت خطاهای خاص Mistral
-      if (mistralError.status === 401) {
-        return NextResponse.json(
-          { error: 'کلید API نامعتبر است. لطفاً از پنل Mistral کلید جدید بگیرید.' },
-          { status: 401 }
-        );
-      }
+      // اگر هوش مصنوعی خطا داد، یک پیام پیش‌فرض برگردان
+      const fallbackReply = 'متاسفانه در حال حاضر قادر به پاسخگویی نیستم. لطفاً بعداً تلاش کنید یا با مطب تماس بگیرید.';
 
-      if (mistralError.status === 403) {
-        return NextResponse.json(
-          { error: 'دسترسی به Mistral ممنوع است. لطفاً کلید API را بررسی کنید یا از IP دیگری استفاده کنید.' },
-          { status: 403 }
-        );
-      }
+      await prisma.chatMessage.create({
+        data: {
+          sessionId: currentSessionId,
+          userId: userId ? parseInt(userId) : null,
+          userMsg: message,
+          botMsg: fallbackReply,
+          adminReply: null,
+          botDisabled: false,
+          isRead: false,
+        },
+      });
 
-      if (mistralError.status === 429) {
-        return NextResponse.json(
-          { error: 'تعداد درخواست‌ها بیش از حد مجاز است. چند لحظه بعد تلاش کنید.' },
-          { status: 429 }
-        );
-      }
-
-      return NextResponse.json(
-        { error: 'خطا در دریافت پاسخ از هوش مصنوعی. لطفاً دوباره تلاش کنید.' },
-        { status: 500 }
-      );
+      return NextResponse.json({ reply: fallbackReply });
     }
   } catch (error) {
-    console.error('❌ General error:', error);
+    console.error('❌ General error in chat API:', error);
     return NextResponse.json(
       { error: 'خطا در پردازش درخواست' },
       { status: 500 }

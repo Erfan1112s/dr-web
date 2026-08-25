@@ -6,6 +6,7 @@ import axios from 'axios';
 // ============================================================
 const SMSIR_API_KEY = process.env.SMSIR_API_KEY;
 const SMSIR_LINE_NUMBER = process.env.SMSIR_LINE_NUMBER;
+const SMSIR_TEMPLATE_ID = process.env.SMSIR_TEMPLATE_ID;
 
 // ============================================================
 // نرمالایز شماره موبایل (تبدیل اعداد فارسی/عربی به انگلیسی)
@@ -38,21 +39,23 @@ function normalizePhone(phone: string): string {
 }
 
 // ============================================================
-// ارسال پیامک با متد Bulk
+// ارسال پیامک با متد Verify (قالب‌های از پیش تعریف‌شده)
 // ============================================================
 export async function sendAppointmentSMS(
   phone: string,
   name: string,
-  date:string,
+  date: string,
   day: string,
   time: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const apiKey = SMSIR_API_KEY;
   const lineNumber = SMSIR_LINE_NUMBER;
+  const templateId = SMSIR_TEMPLATE_ID;
 
-  console.log('📤 [SMS] شروع ارسال پیامک به:', phone);
+  console.log('📤 [SMS] شروع ارسال پیامک Verify به:', phone);
   console.log('  API Key:', apiKey ? '✅ وجود دارد' : '❌ وجود ندارد');
   console.log('  Line Number:', lineNumber ? '✅ وجود دارد' : '❌ وجود ندارد');
+  console.log('  Template ID:', templateId ? '✅ وجود دارد' : '❌ وجود ندارد');
 
   if (!apiKey) {
     console.error('❌ SMSIR_API_KEY تنظیم نشده است');
@@ -62,6 +65,11 @@ export async function sendAppointmentSMS(
   if (!lineNumber) {
     console.error('❌ SMSIR_LINE_NUMBER تنظیم نشده است');
     return { success: false, error: 'شماره خط تنظیم نشده' };
+  }
+
+  if (!templateId) {
+    console.error('❌ SMSIR_TEMPLATE_ID تنظیم نشده است');
+    return { success: false, error: 'شناسه قالب تنظیم نشده است' };
   }
 
   const lineNum = Number(lineNumber);
@@ -79,23 +87,21 @@ export async function sendAppointmentSMS(
     return { success: false, error: error.message };
   }
 
-  // ✅ متن پیامک بدون ایموجی
-  const message = `سلام ${name} عزیز
-نوبت شما در مطب مامایی فرشته صادقی ثبت شد.
-روز: ${day} | ساعت: ${time}
-آدرس: خمینی‌شهر، خیابان بوعلی، روبروی بانک مسکن
-تلفن: ۰۳۱۳۲۶۷۱۰۵۵`;
-
   try {
-    console.log('📤 ارسال درخواست به SMS.ir (Bulk)...');
+    console.log('📤 ارسال درخواست به SMS.ir (Verify)...');
 
     const response = await axios.post(
-      'https://api.sms.ir/v1/send/bulk',
+      'https://api.sms.ir/v1/send/verify',
       {
         lineNumber: lineNum,
-        messageText: message,
-        mobiles: [normalizedPhone],
-        sendDateTime: null,
+        mobile: normalizedPhone,
+        templateId: Number(templateId),
+        parameters: [
+          { name: 'NAME', value: name },
+          { name: 'DATE', value: date },
+          { name: 'DAY', value: day },
+          { name: 'TIME', value: time },
+        ],
       },
       {
         headers: {
@@ -109,7 +115,7 @@ export async function sendAppointmentSMS(
     console.log('✅ پاسخ SMS.ir:', JSON.stringify(response.data, null, 2));
 
     if (response.data?.status === 1) {
-      const messageId = response.data?.data?.messageIds?.[0] || 'unknown';
+      const messageId = response.data?.data?.messageId || 'unknown';
       console.log(`✅ پیامک با موفقیت ارسال شد. ID: ${messageId}`);
       return { success: true, messageId: String(messageId) };
     } else {
@@ -137,72 +143,7 @@ export async function sendAppointmentSMS(
 }
 
 // ============================================================
-// ارسال پیامک با متد Verify (قالب‌های از پیش تعریف‌شده)
-// ============================================================
-export async function sendAppointmentSMSWithTemplate(
-  phone: string,
-  name: string,
-  day: string,
-  time: string,
-  templateId: number
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const apiKey = SMSIR_API_KEY;
-  const lineNumber = SMSIR_LINE_NUMBER;
-
-  if (!apiKey) {
-    return { success: false, error: 'کلید API تنظیم نشده' };
-  }
-  if (!lineNumber) {
-    return { success: false, error: 'شماره خط تنظیم نشده' };
-  }
-
-  const lineNum = Number(lineNumber);
-  if (isNaN(lineNum)) {
-    return { success: false, error: 'شماره خط نامعتبر است' };
-  }
-
-  let normalizedPhone: string;
-  try {
-    normalizedPhone = normalizePhone(phone);
-  } catch (error: any) {
-    return { success: false, error: error.message };
-  }
-
-  try {
-    const response = await axios.post(
-      'https://api.sms.ir/v1/send/verify',
-      {
-        lineNumber: lineNum,
-        mobile: normalizedPhone,
-        templateId: templateId,
-        parameters: [
-          { name: 'NAME', value: name },
-          { name: 'DAY', value: day },
-          { name: 'TIME', value: time },
-        ],
-      },
-      {
-        headers: {
-          'X-API-KEY': apiKey,
-          'Content-Type': 'application/json',
-        },
-        timeout: 10000,
-      }
-    );
-
-    if (response.data?.status === 1) {
-      return { success: true };
-    } else {
-      return { success: false, error: response.data?.message || 'خطا در ارسال' };
-    }
-  } catch (error: any) {
-    console.error('❌ خطا در ارسال پیامک با قالب:', error.response?.data || error.message);
-    return { success: false, error: error.response?.data?.message || error.message };
-  }
-}
-
-// ============================================================
-// ارسال پیامک به ادمین
+// ارسال پیامک به ادمین (با متد Bulk - بدون تغییر)
 // ============================================================
 export async function sendAdminNotification(
   name: string,
@@ -232,11 +173,9 @@ export async function sendAdminNotification(
     return { success: false, error: 'شماره ادمین نامعتبر است' };
   }
 
-  // ✅ متن پیامک ادمین بدون ایموجی
   const message = `نوبت جدید در مطب فرشته صادقی ثبت شد!
 نام: ${name} | موبایل: ${phone}
 روز: ${day} | ساعت: ${time}
-تاریخ: ${date} (${day})
 برای مدیریت به پنل ادمین مراجعه کنید.`;
 
   try {
@@ -276,12 +215,16 @@ export async function sendAdminNotification(
 export async function testSMS(phone: string): Promise<{ success: boolean; error?: string }> {
   const apiKey = SMSIR_API_KEY;
   const lineNumber = SMSIR_LINE_NUMBER;
+  const templateId = SMSIR_TEMPLATE_ID;
 
   if (!apiKey) {
     return { success: false, error: 'کلید API تنظیم نشده' };
   }
   if (!lineNumber) {
     return { success: false, error: 'شماره خط تنظیم نشده' };
+  }
+  if (!templateId) {
+    return { success: false, error: 'شناسه قالب تنظیم نشده است' };
   }
 
   const lineNum = Number(lineNumber);
@@ -298,12 +241,17 @@ export async function testSMS(phone: string): Promise<{ success: boolean; error?
 
   try {
     const response = await axios.post(
-      'https://api.sms.ir/v1/send/bulk',
+      'https://api.sms.ir/v1/send/verify',
       {
         lineNumber: lineNum,
-        messageText: 'این یک پیامک تست از مطب مامایی فرشته صادقی است.',
-        mobiles: [normalizedPhone],
-        sendDateTime: null,
+        mobile: normalizedPhone,
+        templateId: Number(templateId),
+        parameters: [
+          { name: 'NAME', value: 'کاربر تست' },
+          { name: 'DATE', value: '۱۴۰۳/۰۵/۲۵' },
+          { name: 'DAY', value: 'یکشنبه' },
+          { name: 'TIME', value: '۱۷:۰۰' },
+        ],
       },
       {
         headers: {

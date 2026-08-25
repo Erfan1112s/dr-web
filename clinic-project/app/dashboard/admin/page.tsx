@@ -22,8 +22,9 @@ import {
   MessageCircle,
   FileText,
   Reply,
+  Power,
+  PowerOff,
 } from 'lucide-react';
-
 
 // ============================================================
 // تایپ‌ها
@@ -48,15 +49,31 @@ type User = {
   createdAt: string;
 };
 
+type ChatMessage = {
+  id: number;
+  sessionId: string;
+  userId?: number;
+  userMsg: string;
+  botMsg: string;
+  adminReply?: string;
+  botDisabled?: boolean;
+  isRead: boolean;
+  createdAt: string;
+  updatedAt: string;
+  user?: { name: string; phone: string };
+};
+
 type ChatGroup = {
   sessionId: string;
   userId?: number;
   userName?: string;
   userPhone?: string;
-  messages: any[];
+  messages: ChatMessage[];
   lastMessage: string;
   createdAt: string;
   isRead: boolean;
+  hasAdminReply: boolean;
+  botDisabled: boolean;
 };
 
 type Article = {
@@ -121,42 +138,7 @@ export default function AdminDashboard() {
     confirmed: 0,
     cancelled: 0,
     users: 0,
-
-
   });
-
-  // تابع ارسال پاسخ ادمین به چت
-  const sendAdminReply = async (messageId: number, reply: string) => {
-    if (!reply.trim()) return;
-
-    try {
-      const res = await fetch('/api/chat/admin/reply', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messageId, reply }),
-      });
-
-      if (res.ok) {
-        setChatReply('');
-        await fetchAllData(); // بروزرسانی لیست چت‌ها
-        // اگر مکالمه‌ای انتخاب شده بود، آن را هم بروزرسانی کن
-        if (selectedChat) {
-          const updated = await fetch('/api/chat/admin').then(r => r.json());
-          const newGroups = updated.groups || [];
-          const updatedGroup = newGroups.find((g: any) => g.sessionId === selectedChat.sessionId);
-          if (updatedGroup) {
-            setSelectedChat(updatedGroup);
-          }
-        }
-      } else {
-        alert('خطا در ارسال پاسخ');
-      }
-    } catch (error) {
-      console.error('❌ Error sending reply:', error);
-      alert('خطا در ارتباط با سرور');
-    }
-  };
-
 
   // ============================================================
   // useEffect
@@ -206,17 +188,18 @@ export default function AdminDashboard() {
 
       // گروه‌بندی چت‌ها
       if (chatData.groups) {
-          const chatGroupsData = Array.isArray(chatData.groups)
-          ?chatData.groups
-          : Object.entries(chatData.groups).map(([sessionId, messages]) => ({            sessionId,
-            messages,
-          }));
+        const chatGroupsData = Array.isArray(chatData.groups)
+          ? chatData.groups
+          : Object.entries(chatData.groups).map(([sessionId, messages]) => ({
+              sessionId,
+              messages,
+            }));
 
         const groups: ChatGroup[] = chatGroupsData.map((group: any) => {
           const msgs = Array.isArray(group.messages) ? group.messages : [];
           const lastMsg = msgs[0] || {};
           const user = lastMsg.user;
-          
+
           return {
             sessionId: group.sessionId,
             userId: group.userId ?? user?.id,
@@ -226,7 +209,8 @@ export default function AdminDashboard() {
             lastMessage: group.lastMessage || lastMsg.userMsg || '',
             createdAt: group.createdAt || lastMsg.createdAt || new Date().toISOString(),
             isRead: group.isRead ?? msgs.some((m: any) => !m.isRead),
-
+            hasAdminReply: msgs.some((m: any) => m.adminReply !== null && m.adminReply !== ''),
+            botDisabled: msgs.some((m: any) => m.botDisabled === true),
           };
         });
         setChatGroups(groups);
@@ -347,6 +331,70 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('❌ Error replying to comment:', error);
       alert('خطا در ارسال پاسخ');
+    }
+  };
+
+  // ============================================================
+  // توابع مدیریت چت
+  // ============================================================
+  const toggleBot = async (sessionId: string, enable: boolean) => {
+    const action = enable ? 'فعال' : 'غیرفعال';
+    if (!confirm(`آیا از ${action}سازی ربات برای این کاربر اطمینان دارید؟`)) return;
+
+    try {
+      const endpoint = enable
+        ? '/api/chat/admin/enable-bot'
+        : '/api/chat/admin/disable-bot';
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      });
+
+      if (res.ok) {
+        alert(`✅ ربات با موفقیت ${action} شد`);
+        fetchAllData();
+        if (selectedChat && selectedChat.sessionId === sessionId) {
+          setSelectedChat((prev) => prev ? { ...prev, botDisabled: !enable } : null);
+        }
+      } else {
+        alert(`❌ خطا در ${action}سازی ربات`);
+      }
+    } catch (error) {
+      console.error('❌ Error toggling bot:', error);
+      alert('خطا در ارتباط با سرور');
+    }
+  };
+
+  const sendAdminReply = async (messageId: number, reply: string) => {
+    if (!reply.trim()) return;
+
+    try {
+      const res = await fetch('/api/chat/admin/reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId, reply }),
+      });
+
+      if (res.ok) {
+        setChatReply('');
+        await fetchAllData();
+        // بروزرسانی مکالمه انتخاب‌شده
+        if (selectedChat) {
+          const updated = await fetch('/api/chat/admin').then(r => r.json());
+          const newGroups = updated.groups || [];
+          const updatedGroup = newGroups.find((g: any) => g.sessionId === selectedChat.sessionId);
+          if (updatedGroup) {
+            setSelectedChat(updatedGroup);
+          }
+        }
+      } else {
+        alert('خطا در ارسال پاسخ');
+      }
+    } catch (error) {
+      console.error('❌ Error sending reply:', error);
+      alert('خطا در ارتباط با سرور');
     }
   };
 
@@ -688,13 +736,13 @@ export default function AdminDashboard() {
           )}
 
           {/* ===== تب چت‌ها ===== */}
-                    {activeTab === 'chats' && (
+          {activeTab === 'chats' && (
             <div>
               <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
                 <MessageCircle className="text-[var(--color-primary)]" />
                 مدیریت چت‌ها
               </h2>
-                              {chatGroups.length === 0 ? (
+              {chatGroups.length === 0 ? (
                 <div className="text-center py-12 text-[var(--color-text-light)]">
                   <div className="text-6xl mb-4">💬</div>
                   <p>هیچ گفتگویی ثبت نشده است</p>
@@ -723,9 +771,12 @@ export default function AdminDashboard() {
                               {!group.isRead && (
                                 <span className="w-2 h-2 bg-red-500 rounded-full" />
                               )}
+                              {group.botDisabled && (
+                                <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                                  ربات خاموش
+                                </span>
+                              )}
                             </div>
-  
-  
                             <div className="text-sm text-[var(--color-text-light)]">
                               {group.userPhone}
                             </div>
@@ -735,35 +786,77 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                         <div className="text-sm text-gray-600 mt-2 line-clamp-2">
-                          {group.lastMessage || 'بدون پیام'}                        </div>
+                          {group.lastMessage || 'بدون پیام'}
+                        </div>
                       </button>
-                                
                     ))}
                   </div>
 
-                  <div className="lg:col-span-2 bg-gray-50 rounded-2xl p-4 max-h-[600px] flex flex-col">                    {selectedChat ? (
+                  <div className="lg:col-span-2 bg-gray-50 rounded-2xl p-4 max-h-[600px] flex flex-col">
+                    {selectedChat ? (
                       <>
                         <div className="border-b border-gray-200 pb-3 mb-3">
-                          <div className="font-bold">{selectedChat.userName}</div>
-                          <div className="text-sm text-[var(--color-text-light)]">
-                            {selectedChat.userPhone} • {selectedChat.messages.length} پیام
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <div className="font-bold">{selectedChat.userName}</div>
+                              <div className="text-sm text-[var(--color-text-light)]">
+                                {selectedChat.userPhone} • {selectedChat.messages.length} پیام
+                              </div>
+                            </div>
+                            {/* دکمه فعال/غیرفعال‌سازی ربات */}
+                            <button
+                              onClick={() => toggleBot(selectedChat.sessionId, selectedChat.botDisabled)}
+                              className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium transition ${
+                                selectedChat.botDisabled
+                                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                  : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                              }`}
+                            >
+                              {selectedChat.botDisabled ? (
+                                <>
+                                  <Power size={14} />
+                                  فعال‌سازی ربات
+                                </>
+                              ) : (
+                                <>
+                                  <PowerOff size={14} />
+                                  غیرفعال‌سازی ربات
+                                </>
+                              )}
+                            </button>
                           </div>
+                          {selectedChat.botDisabled && (
+                            <div className="text-xs text-amber-600 mt-1">
+                              ⏸️ ربات برای این کاربر غیرفعال است. کاربر پیام «کارشناس در حال بررسی است» را می‌بیند.
+                            </div>
+                          )}
                         </div>
+
                         <div className="flex-1 overflow-y-auto space-y-3 mb-4">
                           {selectedChat.messages.map((msg: any, idx: number) => (
-                            <div key={msg.id ?? idx}>                              <div className="bg-white rounded-2xl p-3 shadow-sm">
+                            <div key={msg.id ?? idx}>
+                              <div className="bg-white rounded-2xl p-3 shadow-sm">
                                 <div className="text-sm font-medium text-[var(--color-primary)]">کاربر:</div>
                                 <div className="text-sm text-gray-700">{msg.userMsg}</div>
                               </div>
-                                                        {msg.botMsg && (
+
+                              {msg.botMsg && (
                                 <div className="bg-[var(--color-primary-bg)] rounded-2xl p-3 shadow-sm mt-2">
-                                  <div className="text-sm font-medium text-[var(--color-primary)]">چت‌بات:</div>
+                                  <div className="text-sm font-medium text-[var(--color-primary)] flex items-center gap-2">
+                                    چت‌بات:
+                                    {msg.botDisabled && (
+                                      <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                                        غیرفعال
+                                      </span>
+                                    )}
+                                  </div>
                                   <div className="text-sm text-gray-700">{msg.botMsg}</div>
                                 </div>
                               )}
+
                               {msg.adminReply && (
-                                <div className="bg-green-50 rounded-2xl p-3 shadow-sm mt-2">
-                                  <div className="text-sm font-medium text-green-700">ادمین:</div>
+                                <div className="bg-green-50 rounded-2xl p-3 shadow-sm mt-2 border-r-4 border-green-500">
+                                  <div className="text-sm font-medium text-green-700">پاسخ ادمین:</div>
                                   <div className="text-sm text-gray-700">{msg.adminReply}</div>
                                 </div>
                               )}
@@ -774,6 +867,7 @@ export default function AdminDashboard() {
                             </div>
                           ))}
                         </div>
+
                         <div className="border-t border-gray-200 pt-3">
                           <div className="flex gap-2">
                             <input
@@ -785,20 +879,29 @@ export default function AdminDashboard() {
                             />
                             <button
                               onClick={() => {
-                                 const firstMsg = selectedChat.messages[0];
-                                if (firstMsg) {
-                                  sendAdminReply(firstMsg.id, chatReply);
-
+                                // پیدا کردن آخرین پیامی که هنوز پاسخ ندارد
+                                const lastUnreplied = selectedChat.messages
+                                  .filter((m: any) => m.userMsg && !m.adminReply)
+                                  .pop();
+                                if (lastUnreplied) {
+                                  sendAdminReply(lastUnreplied.id, chatReply);
+                                } else {
+                                  alert('هیچ پیام بدون پاسخی برای این کاربر وجود ندارد.');
                                 }
                               }}
                               className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-2xl hover:bg-[var(--color-primary-dark)] transition"
-                             title="ارسال پاسخ"
+                              title="ارسال پاسخ"
                             >
                               <Send size={18} />
                             </button>
                           </div>
                           <div className="text-xs text-[var(--color-text-light)] mt-2">
-                            ⚠️ این پاسخ فعلاً به صورت اطلاع‌رسانی است.
+                            💡 پاسخ به آخرین پیام کاربر که هنوز پاسخ داده نشده است.
+                            {selectedChat.botDisabled && (
+                              <span className="block text-amber-600">
+                                ⚠️ ربات غیرفعال است. با ارسال پاسخ، وضعیت تغییری نمی‌کند.
+                              </span>
+                            )}
                           </div>
                         </div>
                       </>
