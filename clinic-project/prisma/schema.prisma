@@ -38,7 +38,7 @@ model Appointment {
 
   user        User?    @relation(fields: [userId], references: [id])
 
-  @@unique([date, time]) // جلوگیری از نوبت‌های همزمان
+  @@unique([date, time]) 
   @@map("appointments")
 }
 
@@ -66,7 +66,7 @@ model Article {
   summary     String
   content     String
   image       String?
-  pdfUrl      String?  // ← اضافه شد
+  pdfUrl      String?  
   category    String
   tags        String?
   author      String   @default("فرشته صادقی")
