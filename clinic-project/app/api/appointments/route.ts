@@ -4,9 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { sendAppointmentSMS, sendAdminNotification } from '@/lib/sms';
 import { toJalaliDateForSMS } from '@/lib/date-utils';
 
-// ============================================================
 // GET: دریافت ساعت‌های آزاد یا نوبت‌های کاربر
-// ============================================================
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -28,7 +26,7 @@ export async function GET(req: NextRequest) {
     if (day && date) {
       console.log(`📅 دریافت درخواست برای روز: ${day}, تاریخ: ${date}`);
 
-      // ✅ بررسی اعتبار تاریخ
+      //  بررسی اعتبار تاریخ
       let dateObj: Date;
       try {
         dateObj = new Date(date);
@@ -55,7 +53,7 @@ export async function GET(req: NextRequest) {
 
       console.log(`📅 بازه جستجو: ${start.toISOString()} تا ${end.toISOString()}`);
 
-      // ✅ بررسی وجود جدول و فیلد date
+      //  بررسی وجود جدول و فیلد date
       let appointments;
       try {
         appointments = await prisma.appointment.findMany({
@@ -219,9 +217,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// ============================================================
 // PUT: به‌روزرسانی نوبت
-// ============================================================
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
@@ -263,9 +259,7 @@ export async function PUT(req: NextRequest) {
   }
 }
 
-// ============================================================
 // DELETE: حذف نوبت
-// ============================================================
 export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
